@@ -9,10 +9,12 @@ simulation_bp = Blueprint('simulation', __name__)
 report_bp = Blueprint('report', __name__)
 account_bp = Blueprint('account', __name__)
 crowd_bp = Blueprint('crowd', __name__)
+calibration_bp = Blueprint('calibration', __name__)
 
 from . import graph  # noqa: E402, F401
 from . import simulation  # noqa: E402, F401
 from . import report  # noqa: E402, F401
 from . import account  # noqa: E402, F401
 from . import crowd  # noqa: E402, F401
+from . import calibration  # noqa: E402, F401
 

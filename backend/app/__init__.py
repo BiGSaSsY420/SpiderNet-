@@ -67,12 +67,16 @@ def create_app(config_class=Config):
     register_error_handlers(app)
     
     # 注册蓝图
-    from .api import graph_bp, simulation_bp, report_bp, account_bp, crowd_bp
+    from .api import (
+        graph_bp, simulation_bp, report_bp, account_bp, crowd_bp,
+        calibration_bp,
+    )
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
     app.register_blueprint(report_bp, url_prefix='/api/report')
     app.register_blueprint(account_bp, url_prefix='/api/account')
     app.register_blueprint(crowd_bp, url_prefix='/api/crowds')
+    app.register_blueprint(calibration_bp, url_prefix='/api/calibration')
     
     # 健康检查
     @app.route('/health')
