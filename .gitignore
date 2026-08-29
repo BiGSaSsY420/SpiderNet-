@@ -58,3 +58,6 @@ backend/uploads/
 
 # Docker 数据
 data/
+# 测试虚拟环境
+backend/.venv/
+.pytest_cache/

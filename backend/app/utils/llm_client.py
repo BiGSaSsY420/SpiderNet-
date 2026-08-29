@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List
 from openai import OpenAI
 
 from ..config import Config
+from .json_repair import repair_json
 
 
 class LLMClient:
@@ -90,14 +91,9 @@ class LLMClient:
             max_tokens=max_tokens,
             response_format={"type": "json_object"}
         )
-        # 清理markdown代码块标记
-        cleaned_response = response.strip()
-        cleaned_response = re.sub(r'^```(?:json)?\s*\n?', '', cleaned_response, flags=re.IGNORECASE)
-        cleaned_response = re.sub(r'\n?```\s*$', '', cleaned_response)
-        cleaned_response = cleaned_response.strip()
-
-        try:
-            return json.loads(cleaned_response)
-        except json.JSONDecodeError:
-            raise ValueError(f"LLM返回的JSON格式无效: {cleaned_response}")
+        # 统一处理代码围栏、截断与混杂文字
+        parsed = repair_json(response)
+        if parsed is None:
+            raise ValueError(f"LLM返回的JSON格式无效: {response[:500]}")
+        return parsed
 

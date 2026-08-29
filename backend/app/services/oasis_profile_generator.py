@@ -20,6 +20,7 @@ from zep_cloud.client import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
+from ..utils.json_repair import repair_json
 from .zep_entity_reader import EntityNode, ZepEntityReader
 
 logger = get_logger('mirofish.oasis_profile')
@@ -539,34 +540,31 @@ class OasisProfileGenerator:
                 
                 content = response.choices[0].message.content
                 
-                # 检查是否被截断（finish_reason不是'stop'）
                 finish_reason = response.choices[0].finish_reason
                 if finish_reason == 'length':
                     logger.warning(f"LLM输出被截断 (attempt {attempt+1}), 尝试修复...")
-                    content = self._fix_truncated_json(content)
                 
-                # 尝试解析JSON
-                try:
-                    result = json.loads(content)
-                    
-                    # 验证必需字段
-                    if "bio" not in result or not result["bio"]:
+                # repair_json 统一处理代码围栏、截断与混杂文字
+                result = repair_json(content)
+                
+                if result is not None:
+                    # 补齐必需字段（截断时 bio / persona 可能缺失）
+                    if not result.get("bio"):
                         result["bio"] = entity_summary[:200] if entity_summary else f"{entity_type}: {entity_name}"
-                    if "persona" not in result or not result["persona"]:
+                    if not result.get("persona"):
                         result["persona"] = entity_summary or f"{entity_name}是一个{entity_type}。"
-                    
                     return result
-                    
-                except json.JSONDecodeError as je:
-                    logger.warning(f"JSON解析失败 (attempt {attempt+1}): {str(je)[:80]}")
-                    
-                    # 尝试修复JSON
-                    result = self._try_fix_json(content, entity_name, entity_type, entity_summary)
-                    if result.get("_fixed"):
-                        del result["_fixed"]
-                        return result
-                    
-                    last_error = je
+                
+                logger.warning(f"JSON 无法解析 (attempt {attempt+1}), 尝试抢救部分字段")
+                
+                # 结构已无法修复时，仍尝试用正则抢救 bio / persona，
+                # 这样 profile 至少可用，而不是整个实体失败
+                salvaged = self._try_fix_json(content, entity_name, entity_type, entity_summary)
+                if salvaged.get("_fixed"):
+                    del salvaged["_fixed"]
+                    return salvaged
+                
+                last_error = ValueError("LLM 返回的 JSON 无法解析")
                     
             except Exception as e:
                 logger.warning(f"LLM调用失败 (attempt {attempt+1}): {str(e)[:80]}")
@@ -579,37 +577,11 @@ class OasisProfileGenerator:
             entity_name, entity_type, entity_summary, entity_attributes
         )
     
-    def _fix_truncated_json(self, content: str) -> str:
-        """修复被截断的JSON（输出被max_tokens限制截断）"""
-        import re
-        
-        # 如果JSON被截断，尝试闭合它
-        content = content.strip()
-        
-        # 计算未闭合的括号
-        open_braces = content.count('{') - content.count('}')
-        open_brackets = content.count('[') - content.count(']')
-        
-        # 检查是否有未闭合的字符串
-        # 简单检查：如果最后一个引号后没有逗号或闭合括号，可能是字符串被截断
-        if content and content[-1] not in '",}]':
-            # 尝试闭合字符串
-            content += '"'
-        
-        # 闭合括号
-        content += ']' * open_brackets
-        content += '}' * open_braces
-        
-        return content
-    
     def _try_fix_json(self, content: str, entity_name: str, entity_type: str, entity_summary: str = "") -> Dict[str, Any]:
-        """尝试修复损坏的JSON"""
+        """结构无法修复时，从残缺文本中抢救 bio / persona 等字段"""
         import re
         
-        # 1. 首先尝试修复被截断的情况
-        content = self._fix_truncated_json(content)
-        
-        # 2. 尝试提取JSON部分
+        # 尝试提取JSON部分
         json_match = re.search(r'\{[\s\S]*\}', content)
         if json_match:
             json_str = json_match.group()

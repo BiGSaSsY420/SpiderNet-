@@ -58,7 +58,8 @@ def retry_with_backoff(
                     # 计算延迟
                     current_delay = min(delay, max_delay)
                     if jitter:
-                        current_delay = current_delay * (0.5 + random.random())
+                        # 抖动后再钳制一次，否则实际延迟可达 max_delay 的 1.5 倍
+                        current_delay = min(current_delay * (0.5 + random.random()), max_delay)
                     
                     logger.warning(
                         f"函数 {func.__name__} 第 {attempt + 1} 次尝试失败: {str(e)}, "
@@ -110,7 +111,8 @@ def retry_with_backoff_async(
                     
                     current_delay = min(delay, max_delay)
                     if jitter:
-                        current_delay = current_delay * (0.5 + random.random())
+                        # 抖动后再钳制一次，否则实际延迟可达 max_delay 的 1.5 倍
+                        current_delay = min(current_delay * (0.5 + random.random()), max_delay)
                     
                     logger.warning(
                         f"异步函数 {func.__name__} 第 {attempt + 1} 次尝试失败: {str(e)}, "
@@ -180,7 +182,7 @@ class RetryableAPIClient:
                     raise
                 
                 current_delay = min(delay, self.max_delay)
-                current_delay = current_delay * (0.5 + random.random())
+                current_delay = min(current_delay * (0.5 + random.random()), self.max_delay)
                 
                 logger.warning(
                     f"API调用第 {attempt + 1} 次尝试失败: {str(e)}, "

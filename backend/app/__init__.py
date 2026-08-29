@@ -62,6 +62,10 @@ def create_app(config_class=Config):
         logger.debug(f"响应: {response.status_code}")
         return response
     
+    # 统一错误响应（避免把堆栈回传给客户端）
+    from .utils.api_response import register_error_handlers
+    register_error_handlers(app)
+    
     # 注册蓝图
     from .api import graph_bp, simulation_bp, report_bp
     app.register_blueprint(graph_bp, url_prefix='/api/graph')

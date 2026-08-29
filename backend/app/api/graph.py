@@ -10,6 +10,7 @@ from flask import request, jsonify
 
 from . import graph_bp
 from ..config import Config
+from ..utils.api_response import error_response
 from ..services.ontology_generator import OntologyGenerator
 from ..services.graph_builder import GraphBuilderService
 from ..services.text_processor import TextProcessor
@@ -21,6 +22,10 @@ from ..models.project import ProjectManager, ProjectStatus
 # 获取日志器
 logger = get_logger('mirofish.api')
 
+# 切块参数边界
+MIN_CHUNK_SIZE = 50
+MAX_CHUNK_SIZE = 100_000
+
 
 def allowed_file(filename: str) -> bool:
     """检查文件扩展名是否允许"""
@@ -31,6 +36,46 @@ def allowed_file(filename: str) -> bool:
 
 
 # ============== 项目管理接口 ==============
+
+
+def _validate_chunk_params(data: dict):
+    """
+    校验请求中显式提供的切块参数，返回错误信息；全部合法时返回 None。
+
+    未提供的参数沿用项目或全局默认值，无需在此校验。
+    """
+    raw_size = data.get('chunk_size')
+    raw_overlap = data.get('chunk_overlap')
+
+    if raw_size is None and raw_overlap is None:
+        return None
+
+    values = {}
+    for name, raw in (('chunk_size', raw_size), ('chunk_overlap', raw_overlap)):
+        if raw is None:
+            continue
+        if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+            return f"{name} 必须为整数，收到: {raw!r}"
+        try:
+            values[name] = int(raw)
+        except (TypeError, ValueError):
+            return f"{name} 必须为整数，收到: {raw!r}"
+
+    size = values.get('chunk_size')
+    overlap = values.get('chunk_overlap')
+
+    if size is not None and not (MIN_CHUNK_SIZE <= size <= MAX_CHUNK_SIZE):
+        return f"chunk_size 必须在 {MIN_CHUNK_SIZE} 到 {MAX_CHUNK_SIZE} 之间，收到: {size}"
+
+    if overlap is not None and overlap < 0:
+        return f"chunk_overlap 不能为负数，收到: {overlap}"
+
+    # 只有两者都提供时才能在此比较；否则由 split_text_into_chunks 内部钳制
+    if size is not None and overlap is not None and overlap >= size:
+        return f"chunk_overlap ({overlap}) 必须小于 chunk_size ({size})"
+
+    return None
+
 
 @graph_bp.route('/project/<project_id>', methods=['GET'])
 def get_project(project_id: str):
@@ -247,11 +292,7 @@ def generate_ontology():
         })
         
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+        return error_response(e)
 
 
 # ============== 接口2：构建图谱 ==============
@@ -303,6 +344,12 @@ def build_graph():
                 "success": False,
                 "error": "请提供 project_id"
             }), 400
+        
+        # 先校验切块参数再落盘查找：这些值会驱动后台线程里的分块循环，
+        # overlap >= chunk_size 会让游标无法前进（后台线程将永不退出）
+        chunk_error = _validate_chunk_params(data)
+        if chunk_error:
+            return error_response(chunk_error, 400)
         
         # 获取项目
         project = ProjectManager.get_project(project_id)
@@ -517,11 +564,7 @@ def build_graph():
         })
         
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+        return error_response(e)
 
 
 # ============== 任务查询接口 ==============
@@ -582,11 +625,7 @@ def get_graph_data(graph_id: str):
         })
         
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+        return error_response(e)
 
 
 @graph_bp.route('/delete/<graph_id>', methods=['DELETE'])
@@ -610,8 +649,4 @@ def delete_graph(graph_id: str):
         })
         
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+        return error_response(e)
