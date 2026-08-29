@@ -11,6 +11,7 @@ from flask import request, jsonify
 from . import graph_bp
 from ..config import Config
 from ..utils.api_response import error_response
+from ..utils.billing import require_access_key, PRICES, assert_owner, current_key_id
 from ..services.ontology_generator import OntologyGenerator
 from ..services.graph_builder import GraphBuilderService
 from ..services.text_processor import TextProcessor
@@ -78,9 +79,10 @@ def _validate_chunk_params(data: dict):
 
 
 @graph_bp.route('/project/<project_id>', methods=['GET'])
+@require_access_key(cost=0)
 def get_project(project_id: str):
     """
-    获取项目详情
+    获取项目详情（仅限本人项目）
     """
     project = ProjectManager.get_project(project_id)
     
@@ -90,6 +92,8 @@ def get_project(project_id: str):
             "error": f"项目不存在: {project_id}"
         }), 404
     
+    assert_owner(project.owner_key_id)
+    
     return jsonify({
         "success": True,
         "data": project.to_dict()
@@ -97,12 +101,19 @@ def get_project(project_id: str):
 
 
 @graph_bp.route('/project/list', methods=['GET'])
+@require_access_key(cost=0)
 def list_projects():
     """
-    列出所有项目
+    列出当前密钥拥有的项目。
+
+    这里必须按拥有者过滤：之前会把所有租户的项目返回给任何调用方。
     """
     limit = request.args.get('limit', 50, type=int)
-    projects = ProjectManager.list_projects(limit=limit)
+    caller = current_key_id()
+    projects = [
+        p for p in ProjectManager.list_projects(limit=limit)
+        if p.owner_key_id is None or p.owner_key_id == caller
+    ]
     
     return jsonify({
         "success": True,
@@ -112,10 +123,22 @@ def list_projects():
 
 
 @graph_bp.route('/project/<project_id>', methods=['DELETE'])
+@require_access_key(cost=0)
 def delete_project(project_id: str):
     """
-    删除项目
+    删除项目（仅限本人项目）
     """
+    project = ProjectManager.get_project(project_id)
+    
+    if not project:
+        return jsonify({
+            "success": False,
+            "error": f"项目不存在或删除失败: {project_id}"
+        }), 404
+    
+    # 删除前必须确认归属，否则任何有效密钥都能删掉别人的项目
+    assert_owner(project.owner_key_id)
+    
     success = ProjectManager.delete_project(project_id)
     
     if not success:
@@ -131,6 +154,7 @@ def delete_project(project_id: str):
 
 
 @graph_bp.route('/project/<project_id>/reset', methods=['POST'])
+@require_access_key(cost=0)
 def reset_project(project_id: str):
     """
     重置项目状态（用于重新构建图谱）
@@ -142,6 +166,8 @@ def reset_project(project_id: str):
             "success": False,
             "error": f"项目不存在: {project_id}"
         }), 404
+    
+    assert_owner(project.owner_key_id)
     
     # 重置到本体已生成状态
     if project.ontology:
@@ -164,6 +190,7 @@ def reset_project(project_id: str):
 # ============== 接口1：上传文件并生成本体 ==============
 
 @graph_bp.route('/ontology/generate', methods=['POST'])
+@require_access_key(cost=PRICES['ontology_generate'])
 def generate_ontology():
     """
     接口1：上传文件，分析生成本体定义
@@ -217,7 +244,9 @@ def generate_ontology():
             }), 400
         
         # 创建项目
-        project = ProjectManager.create_project(name=project_name)
+        project = ProjectManager.create_project(
+            name=project_name, owner_key_id=current_key_id()
+        )
         project.simulation_requirement = simulation_requirement
         logger.info(f"创建项目: {project.project_id}")
         
@@ -298,6 +327,7 @@ def generate_ontology():
 # ============== 接口2：构建图谱 ==============
 
 @graph_bp.route('/build', methods=['POST'])
+@require_access_key(cost=PRICES['graph_build'])
 def build_graph():
     """
     接口2：根据project_id构建图谱
@@ -358,6 +388,8 @@ def build_graph():
                 "success": False,
                 "error": f"项目不存在: {project_id}"
             }), 404
+        
+        assert_owner(project.owner_key_id)
         
         # 检查项目状态
         force = data.get('force', False)  # 强制重新构建
@@ -629,6 +661,7 @@ def get_graph_data(graph_id: str):
 
 
 @graph_bp.route('/delete/<graph_id>', methods=['DELETE'])
+@require_access_key(cost=0)
 def delete_graph(graph_id: str):
     """
     删除Zep图谱

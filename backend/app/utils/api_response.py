@@ -40,6 +40,9 @@ def _infer_status(error: Any) -> int:
     if isinstance(error, UnsafeIdentifierError):
         # 不区分"非法"与"不存在"，避免泄露存储布局
         return 404
+    if type(error).__name__ == "NotYourResource":
+        # 404 而非 403：不要泄露"该资源确实存在，只是不属于你"
+        return 404
     return 500
 
 
@@ -63,7 +66,7 @@ def error_response(
         status = _infer_status(error)
 
     message = str(error)
-    if isinstance(error, UnsafeIdentifierError):
+    if isinstance(error, UnsafeIdentifierError) or type(error).__name__ == "NotYourResource":
         message = "资源不存在"
 
     payload = {"success": False, "error": message}
@@ -85,6 +88,12 @@ def error_response(
 
 def register_error_handlers(app) -> None:
     """把常见异常映射为规范的 JSON 响应，而不是 500 + 堆栈。"""
+
+    from .billing import NotYourResource
+
+    @app.errorhandler(NotYourResource)
+    def _not_your_resource(e):
+        return error_response("资源不存在", 404)
 
     @app.errorhandler(UnsafeIdentifierError)
     def _unsafe_identifier(e):
@@ -110,4 +119,5 @@ def register_error_handlers(app) -> None:
 
     @app.errorhandler(Exception)
     def _unhandled(e):
-        return error_response(e, 500, log_context="未处理的异常")
+        # 不写死 500：让 _infer_status 决定（如 NotYourResource -> 404）
+        return error_response(e, log_context="未处理的异常")

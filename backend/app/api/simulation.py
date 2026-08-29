@@ -10,6 +10,7 @@ from flask import request, jsonify, send_file
 from . import simulation_bp
 from ..config import Config
 from ..utils.api_response import error_response
+from ..utils.billing import require_access_key, PRICES
 from ..services.zep_entity_reader import ZepEntityReader
 from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.simulation_manager import SimulationManager, SimulationStatus
@@ -151,6 +152,7 @@ def get_entities_by_type(graph_id: str, entity_type: str):
 # ============== 模拟管理接口 ==============
 
 @simulation_bp.route('/create', methods=['POST'])
+@require_access_key(cost=0)
 def create_simulation():
     """
     创建新的模拟
@@ -341,6 +343,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
 
 
 @simulation_bp.route('/prepare', methods=['POST'])
+@require_access_key(cost=PRICES['simulation_prepare'])
 def prepare_simulation():
     """
     准备模拟环境（异步任务，LLM智能生成所有参数）
@@ -1315,6 +1318,7 @@ def download_simulation_script(script_name: str):
 # ============== Profile生成接口（独立使用） ==============
 
 @simulation_bp.route('/generate-profiles', methods=['POST'])
+@require_access_key(cost=PRICES['profile_generate'])
 def generate_profiles():
     """
     直接从图谱生成OASIS Agent Profile（不创建模拟）
@@ -1385,6 +1389,7 @@ def generate_profiles():
 # ============== 模拟运行控制接口 ==============
 
 @simulation_bp.route('/start', methods=['POST'])
+@require_access_key(cost=PRICES['simulation_start'])
 def start_simulation():
     """
     开始运行模拟
@@ -1574,6 +1579,7 @@ def start_simulation():
 
 
 @simulation_bp.route('/stop', methods=['POST'])
+@require_access_key(cost=0)
 def stop_simulation():
     """
     停止模拟
@@ -2040,6 +2046,7 @@ def get_simulation_comments(simulation_id: str):
 # ============== Interview 采访接口 ==============
 
 @simulation_bp.route('/interview', methods=['POST'])
+@require_access_key(cost=PRICES['interview'])
 def interview_agent():
     """
     采访单个Agent
@@ -2165,6 +2172,7 @@ def interview_agent():
 
 
 @simulation_bp.route('/interview/batch', methods=['POST'])
+@require_access_key(cost=PRICES['interview_batch'])
 def interview_agents_batch():
     """
     批量采访多个Agent
@@ -2299,6 +2307,7 @@ def interview_agents_batch():
 
 
 @simulation_bp.route('/interview/all', methods=['POST'])
+@require_access_key(cost=PRICES['interview_batch'])
 def interview_all_agents():
     """
     全局采访 - 使用相同问题采访所有Agent
@@ -2398,6 +2407,7 @@ def interview_all_agents():
 
 
 @simulation_bp.route('/interview/history', methods=['POST'])
+@require_access_key(cost=0)
 def get_interview_history():
     """
     获取Interview历史记录
@@ -2527,6 +2537,7 @@ def get_env_status():
 
 
 @simulation_bp.route('/close-env', methods=['POST'])
+@require_access_key(cost=0)
 def close_simulation_env():
     """
     关闭模拟环境

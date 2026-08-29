@@ -51,3 +51,22 @@ def app(isolated_storage):
 @pytest.fixture
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def isolated_billing(tmp_path, monkeypatch):
+    """Keep the access key store out of the real uploads directory."""
+    from app.models.access_key import AccessKeyManager
+    monkeypatch.setattr(AccessKeyManager, "STORE_DIR", str(tmp_path / "billing"))
+    return AccessKeyManager
+
+
+@pytest.fixture
+def paid_key(isolated_billing):
+    """A key with plenty of credits, for tests about something other than billing."""
+    return isolated_billing.issue("Fixture Customer", plan="scale", credits=100_000)
+
+
+@pytest.fixture
+def auth_headers(paid_key):
+    return {"Authorization": f"Bearer {paid_key['key']}"}

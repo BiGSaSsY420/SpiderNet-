@@ -53,6 +53,9 @@ class Project:
     # 错误信息
     error: Optional[str] = None
     
+    # 所属访问密钥（多租户隔离）；历史数据为 None
+    owner_key_id: Optional[str] = None
+    
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
@@ -70,7 +73,8 @@ class Project:
             "simulation_requirement": self.simulation_requirement,
             "chunk_size": self.chunk_size,
             "chunk_overlap": self.chunk_overlap,
-            "error": self.error
+            "error": self.error,
+            "owner_key_id": self.owner_key_id
         }
     
     @classmethod
@@ -95,7 +99,8 @@ class Project:
             simulation_requirement=data.get('simulation_requirement'),
             chunk_size=data.get('chunk_size', 500),
             chunk_overlap=data.get('chunk_overlap', 50),
-            error=data.get('error')
+            error=data.get('error'),
+            owner_key_id=data.get('owner_key_id')
         )
 
 
@@ -132,7 +137,8 @@ class ProjectManager:
         return os.path.join(cls._get_project_dir(project_id), 'extracted_text.txt')
     
     @classmethod
-    def create_project(cls, name: str = "Unnamed Project") -> Project:
+    def create_project(cls, name: str = "Unnamed Project",
+                       owner_key_id: Optional[str] = None) -> Project:
         """
         创建新项目
         
@@ -152,7 +158,8 @@ class ProjectManager:
             name=name,
             status=ProjectStatus.CREATED,
             created_at=now,
-            updated_at=now
+            updated_at=now,
+            owner_key_id=owner_key_id
         )
         
         # 创建项目目录结构

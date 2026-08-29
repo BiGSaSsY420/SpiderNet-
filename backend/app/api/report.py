@@ -11,6 +11,7 @@ from flask import request, jsonify, send_file
 from . import report_bp
 from ..config import Config
 from ..utils.api_response import error_response
+from ..utils.billing import require_access_key, PRICES
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
@@ -23,6 +24,7 @@ logger = get_logger('mirofish.api.report')
 # ============== 报告生成接口 ==============
 
 @report_bp.route('/generate', methods=['POST'])
+@require_access_key(cost=PRICES['report_generate'])
 def generate_report():
     """
     生成模拟分析报告（异步任务）
@@ -418,6 +420,7 @@ def download_report(report_id: str):
 
 
 @report_bp.route('/<report_id>', methods=['DELETE'])
+@require_access_key(cost=0)
 def delete_report(report_id: str):
     """删除报告"""
     try:
@@ -442,6 +445,7 @@ def delete_report(report_id: str):
 # ============== Report Agent对话接口 ==============
 
 @report_bp.route('/chat', methods=['POST'])
+@require_access_key(cost=PRICES['report_chat'])
 def chat_with_report_agent():
     """
     与Report Agent对话

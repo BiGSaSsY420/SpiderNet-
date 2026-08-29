@@ -145,10 +145,10 @@ def test_delete_project_with_traversal_id_does_not_delete(app, client, isolated_
     ({"chunk_size": "abc", "chunk_overlap": 10}, "non-numeric"),
     ({"chunk_size": 10 ** 9, "chunk_overlap": 10}, "absurd size"),
 ])
-def test_dangerous_chunk_params_are_rejected(app, client, params, reason):
+def test_dangerous_chunk_params_are_rejected(app, client, auth_headers, params, reason):
     """These used to reach a background thread and spin a core forever."""
     app.config['DEBUG'] = False
     body = {"project_id": "proj_000000000001", **params}
-    r = client.post('/api/graph/build', json=body)
+    r = client.post('/api/graph/build', json=body, headers=auth_headers)
     assert r.status_code == 400, f"{reason} was not rejected: {r.status_code}"
     assert r.get_json()['success'] is False
