@@ -183,7 +183,7 @@ watch(() => route.params.reportId, (newId) => {
 }, { immediate: true })
 
 onMounted(() => {
-  addLog('InteractionView 初始化')
+  addLog('InteractionView Starting')
   loadReportData()
 })
 </script>

@@ -66,10 +66,10 @@
             </div>
             <!-- 如果有更多文件，显示提示 -->
             <div v-if="project.files.length > 3" class="files-more">
-              +{{ project.files.length - 3 }} 个文件
+              +{{ project.files.length - 3 }} files
             </div>
           </div>
-          <!-- 无文件时的占位 -->
+          <!-- None文件时的占位 -->
           <div class="files-empty" v-else>
             <span class="empty-file-icon">◇</span>
             <span class="empty-file-text">No files</span>
@@ -126,7 +126,7 @@
               <!-- Your question -->
               <div class="modal-section">
                 <div class="modal-label">Your question</div>
-                <div class="modal-requirement">{{ selectedProject.simulation_requirement || '无' }}</div>
+                <div class="modal-requirement">{{ selectedProject.simulation_requirement || 'None' }}</div>
               </div>
 
               <!-- 文件列表 -->
@@ -138,7 +138,7 @@
                     <span class="modal-file-name">{{ file.filename }}</span>
                   </div>
                 </div>
-                <div class="modal-empty" v-else>暂无Files used</div>
+                <div class="modal-empty" v-else>No files yet</div>
               </div>
             </div>
 
@@ -287,7 +287,7 @@ const getCardStyle = (index) => {
   }
 }
 
-// 根据轮数进度获取样式类
+// 根据rounds数进度获取样式类
 const getProgressClass = (simulation) => {
   const current = simulation.current_round || 0
   const total = simulation.total_rounds || 0
@@ -296,10 +296,10 @@ const getProgressClass = (simulation) => {
     // Not started
     return 'not-started'
   } else if (current >= total) {
-    // 已完成
+    // Done
     return 'completed'
   } else {
-    // 进行中
+    // Working
     return 'in-progress'
   }
 }
@@ -348,12 +348,12 @@ const formatSimulationId = (simulationId) => {
   return `SIM_${prefix.toUpperCase()}`
 }
 
-// 格式化轮数显示（当前轮/总轮数）
+// 格式化rounds数显示（当前rounds/总rounds数）
 const formatRounds = (simulation) => {
   const current = simulation.current_round || 0
   const total = simulation.total_rounds || 0
   if (total === 0) return 'Not started'
-  return `${current}/${total} 轮`
+  return `${current}/${total} rounds`
 }
 
 // 获取文件类型（用于样式）
@@ -449,7 +449,7 @@ const loadHistory = async () => {
   }
 }
 
-// 初始化 IntersectionObserver
+// Starting IntersectionObserver
 const initObserver = () => {
   if (observer) {
     observer.disconnect()
@@ -460,7 +460,7 @@ const initObserver = () => {
       entries.forEach((entry) => {
         const shouldExpand = entry.isIntersecting
         
-        // 更新待执行的目标状态（无论是否在动画中都要记录最新的目标状态）
+        // 更新待执行的目标状态（None论是否在动画中都要记录最新的目标状态）
         pendingState = shouldExpand
         
         // 清除之前的防抖定时器（新的滚动意图会覆盖旧的）
@@ -542,7 +542,7 @@ onMounted(async () => {
   await nextTick()
   await loadHistory()
   
-  // 等待 DOM 渲染后初始化观察器
+  // Waiting DOM 渲染后Starting观察器
   setTimeout(() => {
     initObserver()
   }, 100)
@@ -577,7 +577,7 @@ onUnmounted(() => {
   overflow: visible;
 }
 
-/* 无项目时简化显示 */
+/* None项目时简化显示 */
 .history-database.no-projects {
   min-height: auto;
   padding-bottom: 0;
@@ -724,7 +724,7 @@ onUnmounted(() => {
   opacity: 0.5;
 }
 
-/* 轮数进度显示 */
+/* rounds数进度显示 */
 .card-progress {
   display: flex;
   align-items: center;
@@ -739,8 +739,8 @@ onUnmounted(() => {
 }
 
 /* 进度状态颜色 */
-.card-progress.completed { color: #10B981; }    /* 已完成 - 绿色 */
-.card-progress.in-progress { color: #F59E0B; }  /* 进行中 - 橙色 */
+.card-progress.completed { color: #10B981; }    /* Done - 绿色 */
+.card-progress.in-progress { color: #F59E0B; }  /* Working - 橙色 */
 .card-progress.not-started { color: #9CA3AF; }  /* Not started - 灰色 */
 .card-status.pending { color: #9CA3AF; }
 
@@ -833,7 +833,7 @@ onUnmounted(() => {
   letter-spacing: 0.1px;
 }
 
-/* 无文件时的占位 */
+/* None文件时的占位 */
 .files-empty {
   display: flex;
   align-items: center;
@@ -926,7 +926,7 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-/* 底部轮数进度显示 */
+/* 底部rounds数进度显示 */
 .card-footer .card-progress {
   display: flex;
   align-items: center;
@@ -1169,7 +1169,7 @@ onUnmounted(() => {
   padding-right: 4px;
 }
 
-/* 自定义滚动条样式 */
+/* Custom滚动条样式 */
 .modal-files::-webkit-scrollbar {
   width: 4px;
 }

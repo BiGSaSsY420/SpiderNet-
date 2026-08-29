@@ -123,11 +123,11 @@ const handleGoBack = () => {
 const handleNextStep = (params = {}) => {
   addLog('进入 Step 3: 开始模拟')
   
-  // 记录模拟轮数配置
+  // 记录模拟rounds数配置
   if (params.maxRounds) {
-    addLog(`自定义模拟轮数: ${params.maxRounds} 轮`)
+    addLog(`Custom模拟rounds数: ${params.maxRounds} rounds`)
   } else {
-    addLog('使用自动配置的模拟轮数')
+    addLog('使用自动配置的模拟rounds数')
   }
   
   // 构建路由参数
@@ -136,7 +136,7 @@ const handleNextStep = (params = {}) => {
     params: { simulationId: currentSimulationId.value }
   }
   
-  // 如果有自定义轮数，通过 query 参数传递
+  // 如果有Customrounds数，通过 query 参数传递
   if (params.maxRounds) {
     routeParams.query = { maxRounds: params.maxRounds }
   }
@@ -262,7 +262,7 @@ const refreshGraph = () => {
 }
 
 onMounted(async () => {
-  addLog('SimulationView 初始化')
+  addLog('SimulationView Starting')
   
   // 检查并关闭正在运行的模拟（用户从 Step 3 返回时）
   await checkAndStopRunningSimulation()
