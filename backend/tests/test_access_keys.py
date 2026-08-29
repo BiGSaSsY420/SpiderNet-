@@ -1,8 +1,14 @@
 """Access keys, credit metering and the paywall."""
 
 import os
+import pathlib
 import threading
 import pytest
+
+
+def pathlib_root() -> str:
+    """The backend package root, so a subprocess can import the app."""
+    return str(pathlib.Path(__file__).resolve().parent.parent)
 
 from app.models.access_key import (
     AccessKeyManager, InsufficientCredits, KeyStatus, parse_key,
@@ -26,10 +32,12 @@ def test_issued_key_verifies(keystore):
 
 
 def test_plaintext_is_never_stored(keystore, tmp_path):
+    """A stolen database must not hand over working keys."""
     issued = keystore.issue("Acme", credits=10)
-    stored = (tmp_path / "billing" / "access_keys.json").read_text()
-    assert issued["key"] not in stored
-    assert "key_hash" in stored
+    raw = (tmp_path / "billing" / "billing.db").read_bytes()
+    assert issued["key"].encode() not in raw
+    # the hash is there, so we are reading the right file
+    assert keystore.get(issued["record"]["public_id"]).key_hash.encode() in raw
 
 
 def test_issue_response_does_not_echo_the_hash(keystore):
@@ -186,5 +194,80 @@ def test_listing_never_exposes_hashes(keystore):
 
 def test_store_file_is_not_world_readable(keystore, tmp_path):
     keystore.issue("acme", credits=1)
-    mode = os.stat(tmp_path / "billing" / "access_keys.json").st_mode & 0o077
+    mode = os.stat(tmp_path / "billing" / "billing.db").st_mode & 0o077
     assert mode == 0, "access key store should not be readable by others"
+
+
+def test_keys_issued_before_sqlite_are_migrated(keystore, tmp_path):
+    """Upgrading must not strand a paying customer."""
+    import json
+    from app.models.access_key import AccessKey, _hash_key
+
+    billing = tmp_path / "billing"
+    billing.mkdir(parents=True, exist_ok=True)
+    plaintext = "sn_live_" + "ab" * 30
+    legacy = AccessKey(
+        public_id=plaintext.split("_")[2][:12],
+        key_hash=_hash_key(plaintext),
+        label="Legacy Customer", plan="pro", credits_remaining=250,
+    )
+    (billing / "access_keys.json").write_text(
+        json.dumps({legacy.public_id: legacy.to_dict()}), encoding="utf-8"
+    )
+
+    record = keystore.verify(plaintext)
+    assert record is not None, "a key issued before the migration stopped working"
+    assert record.credits_remaining == 250
+    assert record.label == "Legacy Customer"
+    # and the old file is set aside so it cannot be migrated twice
+    assert not (billing / "access_keys.json").exists()
+
+
+def test_concurrent_charges_across_processes_never_oversell(keystore, tmp_path):
+    """
+    The reason balances live in SQLite rather than a JSON file.
+
+    The threaded test above passes with an in-process lock. This one does not:
+    it spends from four separate interpreters, which is what a multi-worker
+    deployment actually looks like.
+    """
+    import subprocess
+    import sys
+    import os as _os
+
+    issued = keystore.issue("Acme", credits=100)
+    pid = issued["record"]["public_id"]
+    store_dir = keystore.STORE_DIR
+
+    spender = f'''
+import sys
+sys.path.insert(0, {str(pathlib_root())!r})
+from app.models.access_key import AccessKeyManager, InsufficientCredits
+AccessKeyManager.STORE_DIR = {store_dir!r}
+won = 0
+for _ in range(50):
+    try:
+        AccessKeyManager.charge({pid!r}, 1)
+        won += 1
+    except InsufficientCredits:
+        pass
+# the app logs to stdout, so mark the answer
+print("SPENT=%d" % won)
+'''
+    env = dict(_os.environ, LLM_API_KEY="test", ZEP_API_KEY="test")
+    procs = [
+        subprocess.Popen([sys.executable, "-c", spender],
+                         stdout=subprocess.PIPE, env=env, text=True)
+        for _ in range(4)
+    ]
+    def spent_by(proc):
+        out = proc.communicate()[0]
+        for line in out.splitlines():
+            if line.startswith("SPENT="):
+                return int(line.split("=", 1)[1])
+        raise AssertionError(f"spender produced no result:\n{out[-400:]}")
+
+    spent = sum(spent_by(p) for p in procs)
+
+    assert spent == 100, f"four processes sold {spent} of 100 credits"
+    assert keystore.get(pid).credits_remaining == 0

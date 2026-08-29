@@ -10,20 +10,29 @@ Security notes:
   once, at creation, and cannot be recovered afterwards.
 - Lookup is by a short public id carried in the key itself, so verification is
   a single dict access followed by one constant-time hash comparison.
-- Balances are mutated under a lock and persisted with an atomic replace.
+- Balances are mutated inside a database transaction, not under a process
+  lock, so concurrency is safe across workers as well as threads.
 
-Scale note: this is a single-process store, adequate for one Flask server. A
-multi-process or multi-host deployment needs a real database with row locking,
-otherwise two workers can spend the same credit.
+Balances live in SQLite rather than a JSON file. That is not premature: the
+balance is the product, and a JSON file guarded by an in-process lock is
+correct only while exactly one worker process exists. Two gunicorn workers, or
+one server plus a cron job, and both can read 1 credit, both can decide it is
+enough, and both can spend it.
+
+Every mutation runs in a BEGIN IMMEDIATE transaction, which takes SQLite's
+write lock before reading. That serialises charges across processes, not just
+across threads. SQLite is the right size for this until there are enough
+customers to need a server database, and the swap is contained in this file.
 """
 
 import hashlib
 import hmac
 import json
 import os
+import sqlite3
 import secrets
-import threading
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
@@ -136,48 +145,126 @@ class AccessKeyManager:
     """Issues, verifies and meters access keys."""
 
     STORE_DIR = os.path.join(Config.UPLOAD_FOLDER, 'billing')
+    # Only read now, to migrate keys issued before the SQLite store existed.
     STORE_FILE = 'access_keys.json'
-
-    _lock = threading.Lock()
 
     # ---- storage -------------------------------------------------------
 
-    @classmethod
-    def _store_path(cls) -> str:
-        return os.path.join(cls.STORE_DIR, cls.STORE_FILE)
+    SCHEMA = """
+    CREATE TABLE IF NOT EXISTS access_keys (
+        public_id         TEXT PRIMARY KEY,
+        key_hash          TEXT NOT NULL,
+        label             TEXT NOT NULL DEFAULT '',
+        plan              TEXT NOT NULL DEFAULT 'starter',
+        credits_remaining INTEGER NOT NULL DEFAULT 0,
+        credits_used      INTEGER NOT NULL DEFAULT 0,
+        status            TEXT NOT NULL DEFAULT 'active',
+        created_at        TEXT NOT NULL,
+        last_used_at      TEXT,
+        environment       TEXT NOT NULL DEFAULT 'live'
+    );
+    CREATE INDEX IF NOT EXISTS idx_access_keys_hash ON access_keys(key_hash);
+    """
 
     @classmethod
-    def _load(cls) -> Dict[str, AccessKey]:
-        path = cls._store_path()
-        if not os.path.exists(path):
-            return {}
+    def _db_path(cls) -> str:
+        return os.path.join(cls.STORE_DIR, 'billing.db')
+
+    @classmethod
+    @contextmanager
+    def _connect(cls, write: bool = False):
+        """
+        A connection with the right locking for what it is about to do.
+
+        `write=True` opens with BEGIN IMMEDIATE, which acquires SQLite's write
+        lock before any read. Without it, two processes can both read a balance
+        of 1, both decide it covers the charge, and both spend it.
+        """
+        os.makedirs(cls.STORE_DIR, exist_ok=True)
+        path = cls._db_path()
+        fresh = not os.path.exists(path)
+
+        conn = sqlite3.connect(path, timeout=15.0, isolation_level=None)
+        conn.row_factory = sqlite3.Row
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.executescript(cls.SCHEMA)
+            if fresh:
+                try:
+                    os.chmod(path, 0o600)
+                except OSError:
+                    pass
+                cls._migrate_from_json(conn)
+
+            if write:
+                conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield conn
+                if write:
+                    conn.execute("COMMIT")
+            except Exception:
+                if write:
+                    conn.execute("ROLLBACK")
+                raise
+        finally:
+            conn.close()
+
+    @classmethod
+    def _migrate_from_json(cls, conn) -> None:
+        """Carry over keys issued before the SQLite store existed."""
+        legacy = os.path.join(cls.STORE_DIR, cls.STORE_FILE)
+        if not os.path.exists(legacy):
+            return
+        try:
+            with open(legacy, 'r', encoding='utf-8') as f:
                 raw = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
-            logger.error(f"Access key store unreadable at {path}: {e}")
-            raise
-        return {pid: AccessKey.from_dict(d) for pid, d in raw.items()}
+            logger.error(f"Could not read the legacy key store at {legacy}: {e}")
+            return
+
+        for record in raw.values():
+            key = AccessKey.from_dict(record)
+            cls._upsert(conn, key)
+        logger.info(f"Migrated {len(raw)} access keys from {legacy} into SQLite")
+        os.replace(legacy, f"{legacy}.migrated")
+
+    @staticmethod
+    def _upsert(conn, key: 'AccessKey') -> None:
+        conn.execute(
+            """
+            INSERT INTO access_keys (
+                public_id, key_hash, label, plan, credits_remaining,
+                credits_used, status, created_at, last_used_at, environment
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(public_id) DO UPDATE SET
+                key_hash=excluded.key_hash,
+                label=excluded.label,
+                plan=excluded.plan,
+                credits_remaining=excluded.credits_remaining,
+                credits_used=excluded.credits_used,
+                status=excluded.status,
+                last_used_at=excluded.last_used_at,
+                environment=excluded.environment
+            """,
+            (
+                key.public_id, key.key_hash, key.label, key.plan,
+                key.credits_remaining, key.credits_used,
+                key.status.value if isinstance(key.status, KeyStatus) else key.status,
+                key.created_at, key.last_used_at, key.environment,
+            ),
+        )
+
+    @staticmethod
+    def _row_to_key(row) -> 'AccessKey':
+        return AccessKey.from_dict(dict(row))
 
     @classmethod
-    def _save(cls, keys: Dict[str, AccessKey]) -> None:
-        os.makedirs(cls.STORE_DIR, exist_ok=True)
-        path = cls._store_path()
-        tmp = f"{path}.{uuid.uuid4().hex}.tmp"
-        payload = {pid: k.to_dict() for pid, k in keys.items()}
-        try:
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp, path)
-            os.chmod(path, 0o600)
-        except Exception:
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-            raise
+    def _fetch(cls, conn, public_id: str) -> Optional['AccessKey']:
+        row = conn.execute(
+            "SELECT * FROM access_keys WHERE public_id = ?", (public_id,)
+        ).fetchone()
+        return cls._row_to_key(row) if row else None
 
     # ---- issuing -------------------------------------------------------
 
@@ -212,10 +299,8 @@ class AccessKeyManager:
             environment=environment,
         )
 
-        with cls._lock:
-            keys = cls._load()
-            keys[public_id] = record
-            cls._save(keys)
+        with cls._connect(write=True) as conn:
+            cls._upsert(conn, record)
 
         logger.info(f"Issued access key {public_id} ({plan}, {credits} credits)")
         return {"key": plaintext, "record": record.to_public_dict()}
@@ -235,9 +320,8 @@ class AccessKeyManager:
         if not public_id:
             return None
 
-        with cls._lock:
-            keys = cls._load()
-            record = keys.get(public_id)
+        with cls._connect() as conn:
+            record = cls._fetch(conn, public_id)
 
         if record is None:
             return None
@@ -265,9 +349,10 @@ class AccessKeyManager:
         if credits < 0:
             raise ValueError("cannot charge a negative amount")
 
-        with cls._lock:
-            keys = cls._load()
-            record = keys.get(public_id)
+        # BEGIN IMMEDIATE: the read and the write are one transaction, so a
+        # second process cannot squeeze between them and spend the same credit.
+        with cls._connect(write=True) as conn:
+            record = cls._fetch(conn, public_id)
             if record is None:
                 raise KeyError(f"unknown access key: {public_id}")
             if record.status != KeyStatus.ACTIVE:
@@ -278,8 +363,7 @@ class AccessKeyManager:
             record.credits_remaining -= credits
             record.credits_used += credits
             record.last_used_at = datetime.now().isoformat()
-            keys[public_id] = record
-            cls._save(keys)
+            cls._upsert(conn, record)
 
         logger.info(
             f"Charged {credits} credits to {public_id}"
@@ -293,15 +377,13 @@ class AccessKeyManager:
         if credits < 0:
             raise ValueError("cannot refund a negative amount")
 
-        with cls._lock:
-            keys = cls._load()
-            record = keys.get(public_id)
+        with cls._connect(write=True) as conn:
+            record = cls._fetch(conn, public_id)
             if record is None:
                 raise KeyError(f"unknown access key: {public_id}")
             record.credits_remaining += credits
             record.credits_used = max(0, record.credits_used - credits)
-            keys[public_id] = record
-            cls._save(keys)
+            cls._upsert(conn, record)
 
         logger.info(
             f"Refunded {credits} credits to {public_id}"
@@ -320,27 +402,24 @@ class AccessKeyManager:
 
     @classmethod
     def revoke(cls, public_id: str) -> AccessKey:
-        with cls._lock:
-            keys = cls._load()
-            record = keys.get(public_id)
+        with cls._connect(write=True) as conn:
+            record = cls._fetch(conn, public_id)
             if record is None:
                 raise KeyError(f"unknown access key: {public_id}")
             record.status = KeyStatus.REVOKED
-            keys[public_id] = record
-            cls._save(keys)
+            cls._upsert(conn, record)
         logger.info(f"Revoked access key {public_id}")
         return record
 
     @classmethod
     def get(cls, public_id: str) -> Optional[AccessKey]:
-        with cls._lock:
-            return cls._load().get(public_id)
+        with cls._connect() as conn:
+            return cls._fetch(conn, public_id)
 
     @classmethod
     def list_keys(cls) -> List[Dict[str, Any]]:
-        with cls._lock:
-            keys = cls._load()
-        return [
-            k.to_public_dict()
-            for k in sorted(keys.values(), key=lambda x: x.created_at, reverse=True)
-        ]
+        with cls._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM access_keys ORDER BY created_at DESC"
+            ).fetchall()
+        return [cls._row_to_key(r).to_public_dict() for r in rows]
