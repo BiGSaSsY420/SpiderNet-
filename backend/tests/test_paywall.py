@@ -262,3 +262,61 @@ def test_denied_and_missing_are_indistinguishable(app, client, billing):
     denied = client.get(f"/api/graph/project/{project.project_id}", headers=auth(bob["key"]))
     missing = client.get("/api/graph/project/proj_doesnotexist", headers=auth(bob["key"]))
     assert denied.status_code == missing.status_code == 404
+
+
+# --- we never charge for work we did not do -------------------------------
+
+REJECTING_POSTS = [
+    "/api/graph/build",
+    "/api/simulation/prepare",
+    "/api/simulation/start",
+    "/api/simulation/interview",
+    "/api/report/generate",
+    "/api/report/chat",
+]
+
+
+@pytest.mark.parametrize("path", REJECTING_POSTS)
+def test_a_rejected_request_is_never_charged(app, client, billing, customer, path):
+    """
+    Handlers report bad input by *returning* a 4xx, not by raising. The refund
+    has to cover that, or every validation error quietly bills the customer.
+    """
+    app.config["DEBUG"] = False
+    pid = customer["record"]["public_id"]
+    before = billing.get(pid).credits_remaining
+
+    r = client.post(path, json={}, headers=auth(customer["key"]))
+    assert r.status_code >= 400, f"{path} accepted an empty body"
+
+    after = billing.get(pid).credits_remaining
+    assert after == before, (
+        f"{path} charged {before - after} credits for a request it rejected"
+    )
+
+
+def test_a_successful_request_is_charged(app, client, billing, customer):
+    """The refund rule must not accidentally make everything free."""
+    from app.models.crowd import CrowdManager
+    from tests.test_crowds import FakeLLM, people
+    import app.models.crowd as crowd_module
+
+    pid = customer["record"]["public_id"]
+    crowd = CrowdManager.create(name="C", people=people(2), owner_key_id=pid)
+    before = billing.get(pid).credits_remaining
+
+    real_poll = CrowdManager.poll
+    try:
+        CrowdManager.poll = classmethod(
+            lambda cls, cid, q, sample_size=25, **kw:
+                real_poll.__func__(cls, cid, q, sample_size=sample_size,
+                                   llm_client=FakeLLM())
+        )
+        r = client.post(f"/api/crowds/{crowd.crowd_id}/ask",
+                        json={"question": "How do you feel?"},
+                        headers=auth(customer["key"]))
+    finally:
+        CrowdManager.poll = real_poll
+
+    assert r.status_code == 200
+    assert billing.get(pid).credits_remaining == before - PRICES["crowd_ask"]

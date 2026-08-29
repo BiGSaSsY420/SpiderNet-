@@ -43,6 +43,10 @@ PRICES = {
     "report_chat": 2,           # a single follow-up question
     "interview": 2,             # asking one simulated person one question
     "interview_batch": 10,
+
+    # Asking a saved crowd. The world was already paid for, so this is just
+    # the fan-out of short LLM calls - the cheap half of the product.
+    "crowd_ask": 3,
 }
 
 HEADER = "X-SpiderNet-Key"
@@ -65,6 +69,23 @@ def _presented_key() -> Optional[str]:
         return header.strip()
 
     return request.args.get("access_key")
+
+
+
+def _status_of(result) -> int:
+    """
+    HTTP status a view returned, whatever shape it used.
+
+    Flask views may return a Response, a (body, status) tuple, a
+    (body, status, headers) tuple, or a bare body meaning 200.
+    """
+    if isinstance(result, tuple):
+        for part in result[1:]:
+            if isinstance(part, int):
+                return part
+        return 200
+    status = getattr(result, "status_code", None)
+    return status if isinstance(status, int) else 200
 
 
 def require_access_key(cost: int = 0):
@@ -113,24 +134,34 @@ def require_access_key(cost: int = 0):
                 g.access_key = record
                 g.charged_credits = cost
 
+            def give_it_back(reason: str) -> None:
+                if not g.get("charged_credits"):
+                    return
+                try:
+                    AccessKeyManager.refund(
+                        record.public_id, g.charged_credits, reason=reason
+                    )
+                    g.charged_credits = 0
+                except Exception as refund_error:
+                    logger.error(
+                        f"Could not refund credits to {record.public_id}: "
+                        f"{refund_error}"
+                    )
+
             try:
-                return view(*args, **kwargs)
+                result = view(*args, **kwargs)
             except Exception:
-                # We took the money before doing the work; give it back if the
-                # work never happened.
-                if g.get("charged_credits"):
-                    try:
-                        AccessKeyManager.refund(
-                            record.public_id,
-                            g.charged_credits,
-                            reason=f"{view.__name__} failed",
-                        )
-                    except Exception as refund_error:
-                        logger.error(
-                            f"Could not refund {g.charged_credits} credits to "
-                            f"{record.public_id}: {refund_error}"
-                        )
+                give_it_back(f"{view.__name__} raised")
                 raise
+
+            # A handler can also fail by *returning* an error, which is how
+            # every validation path in this codebase reports a bad request.
+            # Charging for a rejected request would be theft, so refund on any
+            # error status, not just on an exception.
+            if _status_of(result) >= 400:
+                give_it_back(f"{view.__name__} returned an error")
+
+            return result
 
         # Lets the test suite (and any audit) see which endpoints are gated
         # and at what price, without calling them.
