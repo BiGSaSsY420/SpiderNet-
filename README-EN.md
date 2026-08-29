@@ -162,6 +162,19 @@ npm run backend   # Start backend only
 npm run frontend  # Start frontend only
 ```
 
+#### 4. Run the Tests (Optional)
+
+```bash
+# Both suites, about 30 seconds
+npm test
+
+# With coverage reports
+npm run test:coverage
+```
+
+The tests need no API keys, start no services, and never touch real data.
+See the [Testing Guide](./docs/TESTING-EN.md) for details.
+
 ### Option 2: Docker Deployment
 
 ```bash

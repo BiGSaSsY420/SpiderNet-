@@ -17,6 +17,12 @@ __pycache__
 .mypy_cache
 .ruff_cache
 
+# 覆盖率产物
+backend/htmlcov
+.coverage
+coverage.xml
+frontend/coverage
+
 frontend/dist
 frontend/.vite
 

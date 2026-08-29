@@ -162,6 +162,19 @@ npm run backend   # 仅启动后端
 npm run frontend  # 仅启动前端
 ```
 
+#### 4. 运行测试（可选）
+
+```bash
+# 跑完前后端全部用例，约 30 秒
+npm test
+
+# 附带覆盖率报告
+npm run test:coverage
+```
+
+测试无需配置 API 密钥，也不会启动任何服务或写入真实数据。
+详见 [测试指南](./docs/TESTING.md)。
+
 ### 二、Docker 部署
 
 ```bash

@@ -21,23 +21,25 @@ jobs:
       - name: Set up Python
         run: uv python install 3.11
 
-      # 测试只依赖轻量部分：camel-oasis / camel-ai 仅在真正跑模拟的
-      # 子进程里才需要，安装它们会让 CI 明显变慢。
-      - name: Install test dependencies
+      # 与本地 `npm run test:backend` 完全相同的依赖来源：
+      # requirements-test.txt 只含测试真正导入的轻量依赖，
+      # camel-oasis / camel-ai 仅在真正跑模拟的子进程里才需要。
+      - name: Run pytest with coverage
         working-directory: backend
         run: |
-          uv venv
-          uv pip install \
-            flask flask-cors python-dotenv pydantic openai \
-            charset-normalizer chardet PyMuPDF "zep-cloud==3.13.0" \
-            pytest pytest-asyncio
+          uv run --no-project --with-requirements requirements-test.txt \
+            pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 
-      - name: Run pytest
-        working-directory: backend
-        env:
-          LLM_API_KEY: test-key
-          ZEP_API_KEY: test-key
-        run: uv run --no-project pytest -q
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: |
+            backend/htmlcov/
+            backend/coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
 
   frontend:
     name: Frontend (vitest + build)
@@ -55,9 +57,19 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Run vitest
+      # 同时校验 vite.config.js 中的覆盖率门槛
+      - name: Run vitest with coverage
         working-directory: frontend
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Build
         working-directory: frontend

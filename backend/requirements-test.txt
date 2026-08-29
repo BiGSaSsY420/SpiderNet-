@@ -1,0 +1,24 @@
+# 运行测试所需的最小依赖集合。
+#
+# 测试不会导入 camel-oasis / camel-ai（它们只在真正跑模拟的子进程里才需要，
+# 且会连带装上 torch、transformers 等数 GB 的包）。单独列出这一份，
+# 是为了让 `npm run test:backend` 在几十秒内就能跑起来，而不必先完成
+# 整个后端环境的安装。
+#
+# 版本约束与 pyproject.toml 保持一致。
+
+# 被测代码在导入期就需要的运行时依赖
+flask>=3.0.0
+flask-cors>=6.0.0
+openai>=1.0.0
+zep-cloud==3.13.0
+PyMuPDF>=1.24.0
+charset-normalizer>=3.0.0
+chardet>=5.0.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+
+# 测试工具链
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0

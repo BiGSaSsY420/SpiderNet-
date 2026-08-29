@@ -39,7 +39,10 @@ yarn-error.log*
 # 测试
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+frontend/coverage/
 
 # Cursor
 .cursor/
