@@ -1,0 +1,219 @@
+/**
+ * MiroFish 设计系统 —— 令牌层
+ *
+ * 所有颜色、字号、间距、圆角、阴影、动效都在这里定义。
+ * 组件只允许引用 var(--mf-*)，不得写死具体数值，
+ * 这样改一处即可全局生效，深色模式也只需重新定义令牌。
+ */
+
+:root {
+  /* ---------------------------------------------------------------
+   * 字体
+   *
+   * 之前整个应用都用等宽字体排正文，这是观感不精致的最大来源。
+   * 现在正文交给系统 UI 字体（Apple 设备上即 SF Pro），
+   * 等宽字体退回到它该待的地方：ID、数值、日志。
+   * ------------------------------------------------------------- */
+  --mf-font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Inter", "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mf-font-mono:
+    "SF Mono", "JetBrains Mono", ui-monospace, SFMono-Regular,
+    Menlo, Consolas, "Noto Sans Mono CJK SC", monospace;
+
+  /* 字号：1.20 比例，向排版友好的整数取整 */
+  --mf-text-2xs: 11px;
+  --mf-text-xs: 12px;
+  --mf-text-sm: 13px;
+  --mf-text-base: 15px;
+  --mf-text-md: 17px;
+  --mf-text-lg: 21px;
+  --mf-text-xl: 28px;
+  --mf-text-2xl: 36px;
+  --mf-text-3xl: 48px;
+  --mf-text-4xl: 64px;
+
+  --mf-leading-tight: 1.08;
+  --mf-leading-snug: 1.3;
+  --mf-leading-normal: 1.5;
+  --mf-leading-relaxed: 1.65;
+
+  /* 大字号收紧字距，小字号放开 —— 光学补偿 */
+  --mf-tracking-display: -0.022em;
+  --mf-tracking-tight: -0.014em;
+  --mf-tracking-normal: 0;
+  --mf-tracking-wide: 0.04em;
+  --mf-tracking-caps: 0.08em;
+
+  --mf-weight-regular: 400;
+  --mf-weight-medium: 500;
+  --mf-weight-semibold: 600;
+  --mf-weight-bold: 700;
+
+  /* ---------------------------------------------------------------
+   * 间距：8px 网格，另加两个半档用于紧凑控件
+   * ------------------------------------------------------------- */
+  --mf-space-1: 4px;
+  --mf-space-2: 8px;
+  --mf-space-3: 12px;
+  --mf-space-4: 16px;
+  --mf-space-5: 24px;
+  --mf-space-6: 32px;
+  --mf-space-7: 48px;
+  --mf-space-8: 64px;
+  --mf-space-9: 96px;
+  --mf-space-10: 128px;
+
+  /* ---------------------------------------------------------------
+   * 颜色 —— 浅色
+   * 中性色带极轻微的暖偏，与品牌橙同源，不是纯灰
+   * ------------------------------------------------------------- */
+  --mf-ground: #ffffff;
+  --mf-surface: #ffffff;
+  --mf-surface-raised: #ffffff;
+  --mf-surface-sunken: #f5f5f7;
+  --mf-surface-hover: #f0f0f2;
+
+  --mf-ink: #1d1d1f;
+  --mf-ink-secondary: #494950;
+  --mf-ink-muted: #6e6e73;
+  --mf-ink-faint: #98989d;
+  --mf-ink-inverse: #ffffff;
+
+  --mf-separator: #e3e3e6;
+  --mf-separator-strong: #d0d0d5;
+
+  /* 品牌强调色：只用于主操作与当前状态，绝不做装饰 */
+  --mf-accent: #e2590c;
+  --mf-accent-hover: #c74a06;
+  --mf-accent-active: #a83e05;
+  --mf-accent-soft: #fdf0e8;
+  --mf-accent-border: #f6d3bd;
+  --mf-on-accent: #ffffff;
+
+  /* 语义色：与强调色相互独立 */
+  --mf-success: #1a7f45;
+  --mf-success-soft: #e7f4ec;
+  --mf-warning: #8a5a05;
+  --mf-warning-soft: #fbf1de;
+  --mf-danger: #c0341d;
+  --mf-danger-soft: #fbe9e6;
+  --mf-info: #1f6feb;
+  --mf-info-soft: #e8f1fe;
+
+  /* ---------------------------------------------------------------
+   * 圆角 / 阴影 / 动效
+   * ------------------------------------------------------------- */
+  --mf-radius-xs: 4px;
+  --mf-radius-sm: 6px;
+  --mf-radius-md: 10px;
+  --mf-radius-lg: 14px;
+  --mf-radius-xl: 20px;
+  --mf-radius-full: 999px;
+
+  /* 阴影很浅：用来分层，而不是制造戏剧感 */
+  --mf-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --mf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --mf-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --mf-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --mf-shadow-focus: 0 0 0 3.5px var(--mf-accent-soft);
+
+  --mf-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --mf-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --mf-duration-fast: 120ms;
+  --mf-duration: 200ms;
+  --mf-duration-slow: 340ms;
+
+  --mf-content-max: 1240px;
+  --mf-header-height: 56px;
+
+  color-scheme: light dark;
+}
+
+/* -----------------------------------------------------------------
+ * 深色模式
+ *
+ * 只重新定义令牌，组件样式一行都不用改。
+ * 深色下强调色需要提亮，否则在深底上对比不足。
+ * --------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --mf-ground: #000000;
+    --mf-surface: #1c1c1e;
+    --mf-surface-raised: #242426;
+    --mf-surface-sunken: #141416;
+    --mf-surface-hover: #2c2c2e;
+
+    --mf-ink: #f5f5f7;
+    --mf-ink-secondary: #c7c7cc;
+    --mf-ink-muted: #98989d;
+    --mf-ink-faint: #6e6e73;
+    --mf-ink-inverse: #1d1d1f;
+
+    --mf-separator: #2c2c2e;
+    --mf-separator-strong: #3a3a3c;
+
+    --mf-accent: #ff7a33;
+    --mf-accent-hover: #ff8f52;
+    --mf-accent-active: #e56621;
+    --mf-accent-soft: #2a1810;
+    --mf-accent-border: #4a2a16;
+    --mf-on-accent: #1d1d1f;
+
+    --mf-success: #4ac57c;
+    --mf-success-soft: #16281d;
+    --mf-warning: #e0ac5a;
+    --mf-warning-soft: #2b2114;
+    --mf-danger: #ff6b5c;
+    --mf-danger-soft: #2e1815;
+    --mf-info: #5a9bff;
+    --mf-info-soft: #141f30;
+
+    --mf-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --mf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+    --mf-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55);
+    --mf-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+    --mf-shadow-focus: 0 0 0 3.5px rgba(255, 122, 51, 0.28);
+  }
+}
+
+/* 用户显式选择深色时，同样生效（优先级高于系统偏好） */
+:root[data-theme="dark"] {
+  --mf-ground: #000000;
+  --mf-surface: #1c1c1e;
+  --mf-surface-raised: #242426;
+  --mf-surface-sunken: #141416;
+  --mf-surface-hover: #2c2c2e;
+
+  --mf-ink: #f5f5f7;
+  --mf-ink-secondary: #c7c7cc;
+  --mf-ink-muted: #98989d;
+  --mf-ink-faint: #6e6e73;
+  --mf-ink-inverse: #1d1d1f;
+
+  --mf-separator: #2c2c2e;
+  --mf-separator-strong: #3a3a3c;
+
+  --mf-accent: #ff7a33;
+  --mf-accent-hover: #ff8f52;
+  --mf-accent-active: #e56621;
+  --mf-accent-soft: #2a1810;
+  --mf-accent-border: #4a2a16;
+  --mf-on-accent: #1d1d1f;
+
+  --mf-success: #4ac57c;
+  --mf-success-soft: #16281d;
+  --mf-warning: #e0ac5a;
+  --mf-warning-soft: #2b2114;
+  --mf-danger: #ff6b5c;
+  --mf-danger-soft: #2e1815;
+  --mf-info: #5a9bff;
+  --mf-info-soft: #141f30;
+
+  --mf-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --mf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --mf-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.55);
+  --mf-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --mf-shadow-focus: 0 0 0 3.5px rgba(255, 122, 51, 0.28);
+}

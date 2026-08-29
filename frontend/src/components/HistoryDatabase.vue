@@ -12,9 +12,8 @@
 
     <!-- 标题区域 -->
     <div class="section-header">
-      <div class="section-line"></div>
-      <span class="section-title">推演记录</span>
-      <div class="section-line"></div>
+      <h2 class="section-title">推演记录</h2>
+      <p class="section-sub">此前的推演都保留在这里，点开可回到任一阶段。</p>
     </div>
 
     <!-- 卡片容器（只在有项目时显示） -->
@@ -574,15 +573,14 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   min-height: 280px;
-  margin-top: 40px;
-  padding: 35px 0 40px;
+  padding-bottom: var(--mf-space-6);
   overflow: visible;
 }
 
 /* 无项目时简化显示 */
 .history-database.no-projects {
   min-height: auto;
-  padding: 40px 0 20px;
+  padding-bottom: 0;
 }
 
 /* 技术网格背景 */
@@ -627,28 +625,24 @@ onUnmounted(() => {
 .section-header {
   position: relative;
   z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  margin-bottom: 24px;
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
-  padding: 0 40px;
+  margin-bottom: var(--mf-space-5);
 }
 
 .section-line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #E5E7EB, transparent);
-  max-width: 300px;
+  display: none;
 }
 
 .section-title {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: #9CA3AF;
-  letter-spacing: 3px;
-  text-transform: uppercase;
+  font-size: var(--mf-text-xl);
+  font-weight: var(--mf-weight-semibold);
+  letter-spacing: var(--mf-tracking-tight);
+  color: var(--mf-ink);
+}
+
+.section-sub {
+  margin-top: var(--mf-space-2);
+  font-size: var(--mf-text-base);
+  color: var(--mf-ink-muted);
 }
 
 /* 卡片容器 */
