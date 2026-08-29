@@ -10,6 +10,8 @@ from flask import request, jsonify
 
 from . import graph_bp
 from ..config import Config
+from ..utils.api_response import error_response
+from ..utils.billing import require_access_key, PRICES, assert_owner, current_key_id
 from ..services.ontology_generator import OntologyGenerator
 from ..services.graph_builder import GraphBuilderService
 from ..services.text_processor import TextProcessor
@@ -19,7 +21,11 @@ from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
 
 # 获取日志器
-logger = get_logger('mirofish.api')
+logger = get_logger('spidernet.api')
+
+# 切块参数边界
+MIN_CHUNK_SIZE = 50
+MAX_CHUNK_SIZE = 100_000
 
 
 def allowed_file(filename: str) -> bool:
@@ -32,10 +38,51 @@ def allowed_file(filename: str) -> bool:
 
 # ============== 项目管理接口 ==============
 
+
+def _validate_chunk_params(data: dict):
+    """
+    校验请求中显式提供的切块参数，返回错误信息；全部合法时返回 None。
+
+    未提供的参数沿用项目或全局默认值，无需在此校验。
+    """
+    raw_size = data.get('chunk_size')
+    raw_overlap = data.get('chunk_overlap')
+
+    if raw_size is None and raw_overlap is None:
+        return None
+
+    values = {}
+    for name, raw in (('chunk_size', raw_size), ('chunk_overlap', raw_overlap)):
+        if raw is None:
+            continue
+        if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+            return f"{name} 必须为整数，收到: {raw!r}"
+        try:
+            values[name] = int(raw)
+        except (TypeError, ValueError):
+            return f"{name} 必须为整数，收到: {raw!r}"
+
+    size = values.get('chunk_size')
+    overlap = values.get('chunk_overlap')
+
+    if size is not None and not (MIN_CHUNK_SIZE <= size <= MAX_CHUNK_SIZE):
+        return f"chunk_size 必须在 {MIN_CHUNK_SIZE} 到 {MAX_CHUNK_SIZE} 之间，收到: {size}"
+
+    if overlap is not None and overlap < 0:
+        return f"chunk_overlap 不能为负数，收到: {overlap}"
+
+    # 只有两者都提供时才能在此比较；否则由 split_text_into_chunks 内部钳制
+    if size is not None and overlap is not None and overlap >= size:
+        return f"chunk_overlap ({overlap}) 必须小于 chunk_size ({size})"
+
+    return None
+
+
 @graph_bp.route('/project/<project_id>', methods=['GET'])
+@require_access_key(cost=0)
 def get_project(project_id: str):
     """
-    获取项目详情
+    获取项目详情（仅限本人项目）
     """
     project = ProjectManager.get_project(project_id)
     
@@ -45,6 +92,8 @@ def get_project(project_id: str):
             "error": f"项目不存在: {project_id}"
         }), 404
     
+    assert_owner(project.owner_key_id)
+    
     return jsonify({
         "success": True,
         "data": project.to_dict()
@@ -52,12 +101,19 @@ def get_project(project_id: str):
 
 
 @graph_bp.route('/project/list', methods=['GET'])
+@require_access_key(cost=0)
 def list_projects():
     """
-    列出所有项目
+    列出当前密钥拥有的项目。
+
+    这里必须按拥有者过滤：之前会把所有租户的项目返回给任何调用方。
     """
     limit = request.args.get('limit', 50, type=int)
-    projects = ProjectManager.list_projects(limit=limit)
+    caller = current_key_id()
+    projects = [
+        p for p in ProjectManager.list_projects(limit=limit)
+        if p.owner_key_id is None or p.owner_key_id == caller
+    ]
     
     return jsonify({
         "success": True,
@@ -67,10 +123,22 @@ def list_projects():
 
 
 @graph_bp.route('/project/<project_id>', methods=['DELETE'])
+@require_access_key(cost=0)
 def delete_project(project_id: str):
     """
-    删除项目
+    删除项目（仅限本人项目）
     """
+    project = ProjectManager.get_project(project_id)
+    
+    if not project:
+        return jsonify({
+            "success": False,
+            "error": f"项目不存在或删除失败: {project_id}"
+        }), 404
+    
+    # 删除前必须确认归属，否则任何有效密钥都能删掉别人的项目
+    assert_owner(project.owner_key_id)
+    
     success = ProjectManager.delete_project(project_id)
     
     if not success:
@@ -86,6 +154,7 @@ def delete_project(project_id: str):
 
 
 @graph_bp.route('/project/<project_id>/reset', methods=['POST'])
+@require_access_key(cost=0)
 def reset_project(project_id: str):
     """
     重置项目状态（用于重新构建图谱）
@@ -97,6 +166,8 @@ def reset_project(project_id: str):
             "success": False,
             "error": f"项目不存在: {project_id}"
         }), 404
+    
+    assert_owner(project.owner_key_id)
     
     # 重置到本体已生成状态
     if project.ontology:
@@ -119,6 +190,7 @@ def reset_project(project_id: str):
 # ============== 接口1：上传文件并生成本体 ==============
 
 @graph_bp.route('/ontology/generate', methods=['POST'])
+@require_access_key(cost=PRICES['ontology_generate'])
 def generate_ontology():
     """
     接口1：上传文件，分析生成本体定义
@@ -172,7 +244,9 @@ def generate_ontology():
             }), 400
         
         # 创建项目
-        project = ProjectManager.create_project(name=project_name)
+        project = ProjectManager.create_project(
+            name=project_name, owner_key_id=current_key_id()
+        )
         project.simulation_requirement = simulation_requirement
         logger.info(f"创建项目: {project.project_id}")
         
@@ -247,16 +321,13 @@ def generate_ontology():
         })
         
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+        return error_response(e)
 
 
 # ============== 接口2：构建图谱 ==============
 
 @graph_bp.route('/build', methods=['POST'])
+@require_access_key(cost=PRICES['graph_build'])
 def build_graph():
     """
     接口2：根据project_id构建图谱
@@ -304,6 +375,12 @@ def build_graph():
                 "error": "请提供 project_id"
             }), 400
         
+        # 先校验切块参数再落盘查找：这些值会驱动后台线程里的分块循环，
+        # overlap >= chunk_size 会让游标无法前进（后台线程将永不退出）
+        chunk_error = _validate_chunk_params(data)
+        if chunk_error:
+            return error_response(chunk_error, 400)
+        
         # 获取项目
         project = ProjectManager.get_project(project_id)
         if not project:
@@ -311,6 +388,8 @@ def build_graph():
                 "success": False,
                 "error": f"项目不存在: {project_id}"
             }), 404
+        
+        assert_owner(project.owner_key_id)
         
         # 检查项目状态
         force = data.get('force', False)  # 强制重新构建
@@ -336,7 +415,7 @@ def build_graph():
             project.error = None
         
         # 获取配置
-        graph_name = data.get('graph_name', project.name or 'MiroFish Graph')
+        graph_name = data.get('graph_name', project.name or 'SpiderNet Graph')
         chunk_size = data.get('chunk_size', project.chunk_size or Config.DEFAULT_CHUNK_SIZE)
         chunk_overlap = data.get('chunk_overlap', project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP)
         
@@ -372,7 +451,7 @@ def build_graph():
         
         # 启动后台任务
         def build_task():
-            build_logger = get_logger('mirofish.build')
+            build_logger = get_logger('spidernet.build')
             try:
                 build_logger.info(f"[{task_id}] 开始构建图谱...")
                 task_manager.update_task(
@@ -517,11 +596,7 @@ def build_graph():
         })
         
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+        return error_response(e)
 
 
 # ============== 任务查询接口 ==============
@@ -582,14 +657,11 @@ def get_graph_data(graph_id: str):
         })
         
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+        return error_response(e)
 
 
 @graph_bp.route('/delete/<graph_id>', methods=['DELETE'])
+@require_access_key(cost=0)
 def delete_graph(graph_id: str):
     """
     删除Zep图谱
@@ -610,8 +682,4 @@ def delete_graph(graph_id: str):
         })
         
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+        return error_response(e)

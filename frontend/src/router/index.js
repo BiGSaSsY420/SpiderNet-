@@ -5,12 +5,30 @@ import SimulationView from '../views/SimulationView.vue'
 import SimulationRunView from '../views/SimulationRunView.vue'
 import ReportView from '../views/ReportView.vue'
 import InteractionView from '../views/InteractionView.vue'
+import CrowdsView from '../views/CrowdsView.vue'
+import BillingView from '../views/BillingView.vue'
+import AdminView from '../views/AdminView.vue'
 
 const routes = [
   {
     path: '/',
     name: 'Home',
     component: Home
+  },
+  {
+    path: '/admin',
+    name: 'Admin',
+    component: AdminView
+  },
+  {
+    path: '/billing',
+    name: 'Billing',
+    component: BillingView
+  },
+  {
+    path: '/crowds',
+    name: 'Crowds',
+    component: CrowdsView
   },
   {
     path: '/process/:projectId',

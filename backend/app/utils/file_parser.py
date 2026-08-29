@@ -160,6 +160,13 @@ def split_text_into_chunks(
     Returns:
         文本块列表
     """
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size 必须为正整数，收到: {chunk_size}")
+
+    # overlap 必须严格小于 chunk_size：否则游标 (end - overlap) 不会前进，
+    # while 循环将永远无法结束。这里做钳制而非报错，保证调用方不会被卡死。
+    overlap = max(0, min(overlap, chunk_size - 1))
+
     if len(text) <= chunk_size:
         return [text] if text.strip() else []
     
@@ -182,8 +189,12 @@ def split_text_into_chunks(
         if chunk:
             chunks.append(chunk)
         
-        # 下一个块从重叠位置开始
-        start = end - overlap if end < len(text) else len(text)
+        if end >= len(text):
+            break
+        
+        # 下一个块从重叠位置开始；游标必须前进，否则死循环
+        next_start = end - overlap
+        start = next_start if next_start > start else start + 1
     
     return chunks
 

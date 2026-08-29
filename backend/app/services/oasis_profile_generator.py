@@ -20,9 +20,11 @@ from zep_cloud.client import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
+from ..utils.prompt_lang import localize
+from ..utils.json_repair import repair_json
 from .zep_entity_reader import EntityNode, ZepEntityReader
 
-logger = get_logger('mirofish.oasis_profile')
+logger = get_logger('spidernet.oasis_profile')
 
 
 @dataclass
@@ -539,34 +541,31 @@ class OasisProfileGenerator:
                 
                 content = response.choices[0].message.content
                 
-                # 检查是否被截断（finish_reason不是'stop'）
                 finish_reason = response.choices[0].finish_reason
                 if finish_reason == 'length':
                     logger.warning(f"LLM输出被截断 (attempt {attempt+1}), 尝试修复...")
-                    content = self._fix_truncated_json(content)
                 
-                # 尝试解析JSON
-                try:
-                    result = json.loads(content)
-                    
-                    # 验证必需字段
-                    if "bio" not in result or not result["bio"]:
+                # repair_json 统一处理代码围栏、截断与混杂文字
+                result = repair_json(content)
+                
+                if result is not None:
+                    # 补齐必需字段（截断时 bio / persona 可能缺失）
+                    if not result.get("bio"):
                         result["bio"] = entity_summary[:200] if entity_summary else f"{entity_type}: {entity_name}"
-                    if "persona" not in result or not result["persona"]:
+                    if not result.get("persona"):
                         result["persona"] = entity_summary or f"{entity_name}是一个{entity_type}。"
-                    
                     return result
-                    
-                except json.JSONDecodeError as je:
-                    logger.warning(f"JSON解析失败 (attempt {attempt+1}): {str(je)[:80]}")
-                    
-                    # 尝试修复JSON
-                    result = self._try_fix_json(content, entity_name, entity_type, entity_summary)
-                    if result.get("_fixed"):
-                        del result["_fixed"]
-                        return result
-                    
-                    last_error = je
+                
+                logger.warning(f"JSON 无法解析 (attempt {attempt+1}), 尝试抢救部分字段")
+                
+                # 结构已无法修复时，仍尝试用正则抢救 bio / persona，
+                # 这样 profile 至少可用，而不是整个实体失败
+                salvaged = self._try_fix_json(content, entity_name, entity_type, entity_summary)
+                if salvaged.get("_fixed"):
+                    del salvaged["_fixed"]
+                    return salvaged
+                
+                last_error = ValueError("LLM 返回的 JSON 无法解析")
                     
             except Exception as e:
                 logger.warning(f"LLM调用失败 (attempt {attempt+1}): {str(e)[:80]}")
@@ -579,37 +578,11 @@ class OasisProfileGenerator:
             entity_name, entity_type, entity_summary, entity_attributes
         )
     
-    def _fix_truncated_json(self, content: str) -> str:
-        """修复被截断的JSON（输出被max_tokens限制截断）"""
-        import re
-        
-        # 如果JSON被截断，尝试闭合它
-        content = content.strip()
-        
-        # 计算未闭合的括号
-        open_braces = content.count('{') - content.count('}')
-        open_brackets = content.count('[') - content.count(']')
-        
-        # 检查是否有未闭合的字符串
-        # 简单检查：如果最后一个引号后没有逗号或闭合括号，可能是字符串被截断
-        if content and content[-1] not in '",}]':
-            # 尝试闭合字符串
-            content += '"'
-        
-        # 闭合括号
-        content += ']' * open_brackets
-        content += '}' * open_braces
-        
-        return content
-    
     def _try_fix_json(self, content: str, entity_name: str, entity_type: str, entity_summary: str = "") -> Dict[str, Any]:
-        """尝试修复损坏的JSON"""
+        """结构无法修复时，从残缺文本中抢救 bio / persona 等字段"""
         import re
         
-        # 1. 首先尝试修复被截断的情况
-        content = self._fix_truncated_json(content)
-        
-        # 2. 尝试提取JSON部分
+        # 尝试提取JSON部分
         json_match = re.search(r'\{[\s\S]*\}', content)
         if json_match:
             json_str = json_match.group()
@@ -670,7 +643,7 @@ class OasisProfileGenerator:
     
     def _get_system_prompt(self, is_individual: bool) -> str:
         """获取系统提示词"""
-        base_prompt = "你是社交媒体用户画像生成专家。生成详细、真实的人设用于舆论模拟,最大程度还原已有现实情况。必须返回有效的JSON格式，所有字符串值不能包含未转义的换行符。使用中文。"
+        base_prompt = localize("你是社交媒体用户画像生成专家。生成详细、真实的人设用于舆论模拟,最大程度还原已有现实情况。必须返回有效的JSON格式，所有字符串值不能包含未转义的换行符。Write every human-readable field in {output_language}.")
         return base_prompt
     
     def _build_individual_persona_prompt(
@@ -686,6 +659,7 @@ class OasisProfileGenerator:
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
         context_str = context[:3000] if context else "无额外上下文"
         
+        output_language = Config.OUTPUT_LANGUAGE
         return f"""为实体生成详细的社交媒体用户人设,最大程度还原已有现实情况。
 
 实体名称: {entity_name}
@@ -710,14 +684,14 @@ class OasisProfileGenerator:
 3. age: 年龄数字（必须是整数）
 4. gender: 性别，必须是英文: "male" 或 "female"
 5. mbti: MBTI类型（如INTJ、ENFP等）
-6. country: 国家（使用中文，如"中国"）
+6. country: the country, written in {output_language}
 7. profession: 职业
 8. interested_topics: 感兴趣话题数组
 
 重要:
 - 所有字段值必须是字符串或数字，不要使用换行符
 - persona必须是一段连贯的文字描述
-- 使用中文（除了gender字段必须用英文male/female）
+- Write all human-readable fields in {output_language} (gender must stay male/female in English)
 - 内容要与实体信息保持一致
 - age必须是有效的整数，gender必须是"male"或"female"
 """
@@ -735,6 +709,7 @@ class OasisProfileGenerator:
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
         context_str = context[:3000] if context else "无额外上下文"
         
+        output_language = Config.OUTPUT_LANGUAGE
         return f"""为机构/群体实体生成详细的社交媒体账号设定,最大程度还原已有现实情况。
 
 实体名称: {entity_name}
@@ -759,14 +734,14 @@ class OasisProfileGenerator:
 3. age: 固定填30（机构账号的虚拟年龄）
 4. gender: 固定填"other"（机构账号使用other表示非个人）
 5. mbti: MBTI类型，用于描述账号风格，如ISTJ代表严谨保守
-6. country: 国家（使用中文，如"中国"）
+6. country: the country, written in {output_language}
 7. profession: 机构职能描述
 8. interested_topics: 关注领域数组
 
 重要:
 - 所有字段值必须是字符串或数字，不允许null值
 - persona必须是一段连贯的文字描述，不要使用换行符
-- 使用中文（除了gender字段必须用英文"other"）
+- Write all human-readable fields in {output_language} (gender must stay "other" in English)
 - age必须是整数30，gender必须是字符串"other"
 - 机构账号发言要符合其身份定位"""
     

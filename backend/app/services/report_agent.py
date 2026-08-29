@@ -21,6 +21,7 @@ from enum import Enum
 from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
+from ..utils.prompt_lang import localize
 from .zep_tools import (
     ZepToolsService, 
     SearchResult, 
@@ -29,7 +30,7 @@ from .zep_tools import (
     InterviewResult
 )
 
-logger = get_logger('mirofish.report_agent')
+logger = get_logger('spidernet.report_agent')
 
 
 class ReportLogger:
@@ -352,8 +353,8 @@ class ReportConsoleLogger:
         
         # 添加到 report_agent 相关的 logger
         loggers_to_attach = [
-            'mirofish.report_agent',
-            'mirofish.zep_tools',
+            'spidernet.report_agent',
+            'spidernet.zep_tools',
         ]
         
         for logger_name in loggers_to_attach:
@@ -368,8 +369,8 @@ class ReportConsoleLogger:
         
         if self._file_handler:
             loggers_to_detach = [
-                'mirofish.report_agent',
-                'mirofish.zep_tools',
+                'spidernet.report_agent',
+                'spidernet.zep_tools',
             ]
             
             for logger_name in loggers_to_detach:
@@ -653,8 +654,9 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 
 3. 【语言一致性 - 引用内容必须翻译为报告语言】
    - 工具返回的内容可能包含英文或中英文混杂的表述
-   - 如果模拟需求和材料原文是中文的，报告必须全部使用中文撰写
-   - 当你引用工具返回的英文或中英混杂内容时，必须将其翻译为流畅的中文后再写入报告
+   - The entire report must be written in {output_language}
+   - When quoting tool output in another language, translate it into fluent
+     {output_language} before putting it in the report
    - 翻译时保持原意不变，确保表述自然通顺
    - 这一规则同时适用于正文和引用块（> 格式）中的内容
 
@@ -764,6 +766,9 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 5. 保持与其他章节的逻辑连贯性
 6. 【避免重复】仔细阅读下方已完成的章节内容，不要重复描述相同的信息
 7. 【再次强调】不要添加任何标题！用**粗体**代替小节标题"""
+
+# 输出语言在导入时固化，避免后续 .format() 遇到未知占位符
+SECTION_SYSTEM_PROMPT_TEMPLATE = localize(SECTION_SYSTEM_PROMPT_TEMPLATE)
 
 SECTION_USER_PROMPT_TEMPLATE = """\
 已完成的章节内容（请仔细阅读，避免重复）：

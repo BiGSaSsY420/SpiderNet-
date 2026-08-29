@@ -6,6 +6,7 @@
 import json
 from typing import Dict, Any, List, Optional
 from ..utils.llm_client import LLMClient
+from ..utils.prompt_lang import localize
 
 
 # 本体生成的系统提示词
@@ -66,7 +67,7 @@ ONTOLOGY_SYSTEM_PROMPT = """你是一个专业的知识图谱本体设计专家�
             "attributes": []
         }
     ],
-    "analysis_summary": "对文本内容的简要分析说明（中文）"
+    "analysis_summary": "A brief analysis of the text, written in {output_language}"
 }
 ```
 
@@ -153,6 +154,8 @@ B. **具体类型（8个，根据文本内容设计）**：
 - COLLABORATES_WITH: 合作
 - COMPETES_WITH: 竞争
 """
+
+ONTOLOGY_SYSTEM_PROMPT = localize(ONTOLOGY_SYSTEM_PROMPT)
 
 
 class OntologyGenerator:
@@ -357,7 +360,7 @@ class OntologyGenerator:
         code_lines = [
             '"""',
             '自定义实体类型定义',
-            '由MiroFish自动生成，用于社会舆论模拟',
+            '由SpiderNet自动生成，用于社会舆论模拟',
             '"""',
             '',
             'from pydantic import Field',

@@ -20,9 +20,10 @@ from openai import OpenAI
 
 from ..config import Config
 from ..utils.logger import get_logger
+from ..utils.json_repair import repair_json
 from .zep_entity_reader import EntityNode, ZepEntityReader
 
-logger = get_logger('mirofish.simulation_config')
+logger = get_logger('spidernet.simulation_config')
 
 # 中国作息时间配置（北京时间）
 CHINA_TIMEZONE_CONFIG = {
@@ -453,23 +454,17 @@ class SimulationConfigGenerator:
                 content = response.choices[0].message.content
                 finish_reason = response.choices[0].finish_reason
                 
-                # 检查是否被截断
                 if finish_reason == 'length':
                     logger.warning(f"LLM输出被截断 (attempt {attempt+1})")
-                    content = self._fix_truncated_json(content)
                 
-                # 尝试解析JSON
-                try:
-                    return json.loads(content)
-                except json.JSONDecodeError as e:
-                    logger.warning(f"JSON解析失败 (attempt {attempt+1}): {str(e)[:80]}")
-                    
-                    # 尝试修复JSON
-                    fixed = self._try_fix_config_json(content)
-                    if fixed:
-                        return fixed
-                    
-                    last_error = e
+                # repair_json 统一处理代码围栏、截断与混杂文字；
+                # 无法安全修复时返回 None，此时重试而不是使用破损数据
+                parsed = repair_json(content)
+                if parsed is not None:
+                    return parsed
+                
+                logger.warning(f"JSON 无法解析且无法安全修复 (attempt {attempt+1})")
+                last_error = ValueError("LLM 返回的 JSON 无法解析")
                     
             except Exception as e:
                 logger.warning(f"LLM调用失败 (attempt {attempt+1}): {str(e)[:80]}")
@@ -478,58 +473,6 @@ class SimulationConfigGenerator:
                 time.sleep(2 * (attempt + 1))
         
         raise last_error or Exception("LLM调用失败")
-    
-    def _fix_truncated_json(self, content: str) -> str:
-        """修复被截断的JSON"""
-        content = content.strip()
-        
-        # 计算未闭合的括号
-        open_braces = content.count('{') - content.count('}')
-        open_brackets = content.count('[') - content.count(']')
-        
-        # 检查是否有未闭合的字符串
-        if content and content[-1] not in '",}]':
-            content += '"'
-        
-        # 闭合括号
-        content += ']' * open_brackets
-        content += '}' * open_braces
-        
-        return content
-    
-    def _try_fix_config_json(self, content: str) -> Optional[Dict[str, Any]]:
-        """尝试修复配置JSON"""
-        import re
-        
-        # 修复被截断的情况
-        content = self._fix_truncated_json(content)
-        
-        # 提取JSON部分
-        json_match = re.search(r'\{[\s\S]*\}', content)
-        if json_match:
-            json_str = json_match.group()
-            
-            # 移除字符串中的换行符
-            def fix_string(match):
-                s = match.group(0)
-                s = s.replace('\n', ' ').replace('\r', ' ')
-                s = re.sub(r'\s+', ' ', s)
-                return s
-            
-            json_str = re.sub(r'"[^"\\]*(?:\\.[^"\\]*)*"', fix_string, json_str)
-            
-            try:
-                return json.loads(json_str)
-            except:
-                # 尝试移除所有控制字符
-                json_str = re.sub(r'[\x00-\x1f\x7f-\x9f]', ' ', json_str)
-                json_str = re.sub(r'\s+', ' ', json_str)
-                try:
-                    return json.loads(json_str)
-                except:
-                    pass
-        
-        return None
     
     def _generate_time_config(self, context: str, num_entities: int) -> Dict[str, Any]:
         """生成时间配置"""

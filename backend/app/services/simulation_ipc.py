@@ -19,7 +19,7 @@ from enum import Enum
 
 from ..utils.logger import get_logger
 
-logger = get_logger('mirofish.simulation_ipc')
+logger = get_logger('spidernet.simulation_ipc')
 
 
 class CommandType(str, Enum):
@@ -92,6 +92,32 @@ class IPCResponse:
         )
 
 
+
+def _write_json_atomic(path: str, payload: Dict[str, Any]) -> None:
+    """
+    原子写入 JSON。
+
+    对端是靠轮询目录来发现文件的，如果直接 open(path,'w') 再 json.dump，
+    读取方可能读到只写了一半的文件。先写临时文件再 os.replace，
+    读取方要么看不到文件，要么看到完整内容。
+    """
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
+    tmp_path = f"{path}.{uuid.uuid4().hex}.tmp"
+    try:
+        with open(tmp_path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 class SimulationIPCClient:
     """
     模拟IPC客户端（Flask端使用）
@@ -145,8 +171,7 @@ class SimulationIPCClient:
         
         # 写入命令文件
         command_file = os.path.join(self.commands_dir, f"{command_id}.json")
-        with open(command_file, 'w', encoding='utf-8') as f:
-            json.dump(command.to_dict(), f, ensure_ascii=False, indent=2)
+        _write_json_atomic(command_file, command.to_dict())
         
         logger.info(f"发送IPC命令: {command_type.value}, command_id={command_id}")
         
@@ -342,7 +367,7 @@ class SimulationIPCServer:
         # 按时间排序获取命令文件
         command_files = []
         for filename in os.listdir(self.commands_dir):
-            if filename.endswith('.json'):
+            if filename.endswith('.json') and not filename.endswith('.tmp'):
                 filepath = os.path.join(self.commands_dir, filename)
                 command_files.append((filepath, os.path.getmtime(filepath)))
         
@@ -367,8 +392,7 @@ class SimulationIPCServer:
             response: IPC响应
         """
         response_file = os.path.join(self.responses_dir, f"{response.command_id}.json")
-        with open(response_file, 'w', encoding='utf-8') as f:
-            json.dump(response.to_dict(), f, ensure_ascii=False, indent=2)
+        _write_json_atomic(response_file, response.to_dict())
         
         # 删除命令文件
         command_file = os.path.join(self.commands_dir, f"{response.command_id}.json")
