@@ -160,6 +160,8 @@ FREE_BY_DESIGN = {
     "/api/report/generate/status",
     "/api/report/tools/search",
     "/api/report/tools/statistics",
+    # Stripe holds no key of ours; the signature is the authentication.
+    "/api/account/stripe/webhook",
 }
 
 

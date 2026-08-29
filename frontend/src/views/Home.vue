@@ -6,13 +6,14 @@
         <a class="nav__brand" href="/" @click.prevent="$router.push('/')">SpiderNet</a>
 
         <div class="nav__right">
-          <span
+          <button
             v-if="credits !== null"
             class="nav__credits mf-mono"
             :title="account ? `Plan: ${account.plan}` : ''"
+            @click="$router.push('/billing')"
           >
             {{ credits.toLocaleString() }} credits
-          </span>
+          </button>
           <button
             v-if="hasKey"
             class="mf-btn mf-btn--ghost mf-btn--sm"
@@ -425,10 +426,15 @@ const startSimulation = () => {
 }
 
 .nav__credits {
+  border: 0;
+  background: transparent;
+  padding: 0;
   font-size: var(--mf-text-sm);
   font-weight: var(--mf-weight-medium);
   color: var(--mf-ink-secondary);
+  cursor: pointer;
 }
+.nav__credits:hover { color: var(--mf-accent); }
 
 /* ---- Layout: one narrow column, so there is never a question about
        where to look next ---- */

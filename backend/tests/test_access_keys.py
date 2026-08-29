@@ -201,24 +201,38 @@ def test_store_file_is_not_world_readable(keystore, tmp_path):
 def test_keys_issued_before_sqlite_are_migrated(keystore, tmp_path):
     """Upgrading must not strand a paying customer."""
     import json
-    from app.models.access_key import AccessKey, _hash_key
+    from app.models.access_key import _hash_key
 
     billing = tmp_path / "billing"
     billing.mkdir(parents=True, exist_ok=True)
     plaintext = "sn_live_" + "ab" * 30
-    legacy = AccessKey(
-        public_id=plaintext.split("_")[2][:12],
-        key_hash=_hash_key(plaintext),
-        label="Legacy Customer", plan="pro", credits_remaining=250,
-    )
+    public_id = plaintext.split("_")[2][:12]
+
+    # The literal shape written before the buckets existed: one balance, no
+    # subscription fields.
+    legacy = {
+        "public_id": public_id,
+        "key_hash": _hash_key(plaintext),
+        "label": "Legacy Customer",
+        "plan": "pro",
+        "credits_remaining": 250,
+        "credits_used": 10,
+        "status": "active",
+        "created_at": "2026-01-01T00:00:00",
+        "environment": "live",
+    }
     (billing / "access_keys.json").write_text(
-        json.dumps({legacy.public_id: legacy.to_dict()}), encoding="utf-8"
+        json.dumps({public_id: legacy}), encoding="utf-8"
     )
 
     record = keystore.verify(plaintext)
     assert record is not None, "a key issued before the migration stopped working"
     assert record.credits_remaining == 250
     assert record.label == "Legacy Customer"
+    # An old balance is permanent, not an allowance: it must not evaporate at
+    # the next rollover just because we changed the schema.
+    assert record.topup_credits == 250
+    assert record.subscription_credits == 0
     # and the old file is set aside so it cannot be migrated twice
     assert not (billing / "access_keys.json").exists()
 

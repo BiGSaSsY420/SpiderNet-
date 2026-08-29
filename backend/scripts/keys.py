@@ -2,7 +2,9 @@
 """
 Access key administration.
 
-    python scripts/keys.py issue  --label "Acme Corp" --plan pro --credits 1000
+    python scripts/keys.py issue  --label "Acme Corp" --plan pro --subscribe
+    python scripts/keys.py issue  --label "Trial user" --credits 100
+    python scripts/keys.py plans
     python scripts/keys.py list
     python scripts/keys.py show   <public_id>
     python scripts/keys.py topup  <public_id> --credits 500
@@ -18,26 +20,20 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models.access_key import AccessKeyManager  # noqa: E402
-
-PLANS = {
-    #  name      credits  price   what it is
-    "trial":    (100,     0,      "One full run, on the house"),
-    "starter":  (1_000,   49,     "About five runs"),
-    "pro":      (5_000,   199,    "About twenty-six runs"),
-    "scale":    (25_000,  849,    "About one hundred thirty runs"),
-}
+from app.models.access_key import (  # noqa: E402
+    PLANS, TOPUP_PACKS, AccessKeyManager,
+)
 
 
 def cmd_issue(args):
-    credits = args.credits
-    if credits is None:
-        if args.plan not in PLANS:
-            sys.exit(f"Unknown plan '{args.plan}'. Choose from: {', '.join(PLANS)}")
-        credits = PLANS[args.plan][0]
+    if args.plan not in PLANS:
+        sys.exit(f"Unknown plan '{args.plan}'. Choose from: {', '.join(PLANS)}")
 
+    # --credits grants permanent credits; --subscribe grants the monthly
+    # allowance instead. Without either, the key is created empty.
     issued = AccessKeyManager.issue(
-        label=args.label, plan=args.plan, credits=credits, environment=args.env
+        label=args.label, plan=args.plan, credits=args.credits or 0,
+        environment=args.env, subscribe=args.subscribe,
     )
     record = issued["record"]
 
@@ -48,7 +44,9 @@ def cmd_issue(args):
     print()
     print(f"    Customer   {record['label']}")
     print(f"    Plan       {record['plan']}")
-    print(f"    Credits    {record['credits_remaining']}")
+    print(f"    Credits    {record['credits_remaining']} "
+          f"({record['subscription_credits']} allowance + "
+          f"{record['topup_credits']} bought)")
     print(f"    Public id  {record['public_id']}")
     print()
 
@@ -87,9 +85,15 @@ def cmd_revoke(args):
 
 
 def cmd_plans(args):
-    print(f"{'PLAN':10} {'CREDITS':>9} {'PRICE':>8}  DESCRIPTION")
-    for name, (credits, price, desc) in PLANS.items():
-        print(f"{name:10} {credits:>9} {'$' + str(price):>8}  {desc}")
+    print(f"{'PLAN':10} {'CREDITS/MO':>11} {'PRICE':>8}  PER CREDIT")
+    for name, p in PLANS.items():
+        rate = f"${p['price_usd'] / p['monthly_credits']:.3f}" if p["monthly_credits"] else "-"
+        print(f"{name:10} {p['monthly_credits']:>11} {'$' + str(p['price_usd']):>8}  {rate}")
+    print()
+    print(f"{'TOP-UP':10} {'CREDITS':>11} {'PRICE':>8}  PER CREDIT")
+    for name, p in TOPUP_PACKS.items():
+        print(f"{name:10} {p['credits']:>11} {'$' + str(p['price_usd']):>8}  "
+              f"${p['price_usd'] / p['credits']:.3f}")
 
 
 def main():
@@ -99,7 +103,10 @@ def main():
     p = sub.add_parser("issue", help="mint a new key")
     p.add_argument("--label", required=True, help="who it is for")
     p.add_argument("--plan", default="starter", help=f"one of: {', '.join(PLANS)}")
-    p.add_argument("--credits", type=int, default=None, help="override the plan's credits")
+    p.add_argument("--credits", type=int, default=None,
+                   help="permanent credits to grant (these never expire)")
+    p.add_argument("--subscribe", action="store_true",
+                   help="start the monthly allowance for this plan")
     p.add_argument("--env", default="live", help="live or test")
     p.set_defaults(func=cmd_issue)
 

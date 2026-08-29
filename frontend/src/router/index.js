@@ -6,12 +6,18 @@ import SimulationRunView from '../views/SimulationRunView.vue'
 import ReportView from '../views/ReportView.vue'
 import InteractionView from '../views/InteractionView.vue'
 import CrowdsView from '../views/CrowdsView.vue'
+import BillingView from '../views/BillingView.vue'
 
 const routes = [
   {
     path: '/',
     name: 'Home',
     component: Home
+  },
+  {
+    path: '/billing',
+    name: 'Billing',
+    component: BillingView
   },
   {
     path: '/crowds',

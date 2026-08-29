@@ -4,9 +4,13 @@
       <div class="mf-container nav__inner">
         <a class="nav__brand" href="/" @click.prevent="$router.push('/')">SpiderNet</a>
         <div class="nav__right">
-          <span v-if="credits !== null" class="nav__credits mf-mono">
+          <button
+            v-if="credits !== null"
+            class="nav__credits mf-mono"
+            @click="$router.push('/billing')"
+          >
             {{ credits.toLocaleString() }} credits
-          </span>
+          </button>
         </div>
       </div>
     </nav>
@@ -230,10 +234,15 @@ async function ask () {
 }
 
 .nav__credits {
+  border: 0;
+  background: transparent;
+  padding: 0;
   font-size: var(--mf-text-sm);
   font-weight: var(--mf-weight-medium);
   color: var(--mf-ink-secondary);
+  cursor: pointer;
 }
+.nav__credits:hover { color: var(--mf-accent); }
 
 .main {
   max-width: 760px;
