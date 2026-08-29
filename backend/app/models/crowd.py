@@ -197,6 +197,21 @@ class CrowdManager:
         return sorted(out, key=lambda c: c.created_at, reverse=True)
 
     @classmethod
+    def all_crowds(cls) -> List[Crowd]:
+        """Every crowd, private ones included. Operator use only."""
+        if not os.path.isdir(cls.CROWDS_DIR):
+            return []
+        out = []
+        for entry in os.listdir(cls.CROWDS_DIR):
+            try:
+                crowd = cls.get(entry)
+            except Exception:
+                continue
+            if crowd is not None:
+                out.append(crowd)
+        return sorted(out, key=lambda c: c.created_at, reverse=True)
+
+    @classmethod
     def delete(cls, crowd_id: str) -> bool:
         path = cls._crowd_dir(crowd_id)
         if not os.path.isdir(path):

@@ -7,12 +7,18 @@ import ReportView from '../views/ReportView.vue'
 import InteractionView from '../views/InteractionView.vue'
 import CrowdsView from '../views/CrowdsView.vue'
 import BillingView from '../views/BillingView.vue'
+import AdminView from '../views/AdminView.vue'
 
 const routes = [
   {
     path: '/',
     name: 'Home',
     component: Home
+  },
+  {
+    path: '/admin',
+    name: 'Admin',
+    component: AdminView
   },
   {
     path: '/billing',

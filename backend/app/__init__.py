@@ -69,7 +69,7 @@ def create_app(config_class=Config):
     # 注册蓝图
     from .api import (
         graph_bp, simulation_bp, report_bp, account_bp, crowd_bp,
-        calibration_bp,
+        calibration_bp, admin_bp,
     )
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
@@ -77,6 +77,7 @@ def create_app(config_class=Config):
     app.register_blueprint(account_bp, url_prefix='/api/account')
     app.register_blueprint(crowd_bp, url_prefix='/api/crowds')
     app.register_blueprint(calibration_bp, url_prefix='/api/calibration')
+    app.register_blueprint(admin_bp, url_prefix='/api/admin')
     
     # 健康检查
     @app.route('/health')

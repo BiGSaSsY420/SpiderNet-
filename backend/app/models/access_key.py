@@ -35,7 +35,7 @@ import secrets
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -745,6 +745,85 @@ class AccessKeyManager:
                    FROM credit_ledger WHERE public_id = ?
                    ORDER BY id DESC LIMIT ?""",
                 (public_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+
+    # ---- operator reporting --------------------------------------------
+
+    @classmethod
+    def all_keys(cls) -> List['AccessKey']:
+        """Every key, rolled to the current period."""
+        with cls._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM access_keys ORDER BY created_at DESC"
+            ).fetchall()
+        return [cls._rolled(cls._row_to_key(r)) for r in rows]
+
+    @classmethod
+    def business_summary(cls) -> Dict[str, Any]:
+        """
+        What the business actually looks like right now.
+
+        `credits_outstanding` is the one to watch: unspent credits are work
+        already paid for and not yet delivered, so it is a liability, not
+        revenue. Booking it as income is how a credit business flatters itself
+        into insolvency.
+        """
+        keys = cls.all_keys()
+        active = [k for k in keys if k.status == KeyStatus.ACTIVE]
+        subscribers = [
+            k for k in active
+            if k.subscription_status == SubscriptionStatus.ACTIVE
+            and PLANS.get(k.plan, {}).get("price_usd", 0) > 0
+        ]
+
+        mrr = sum(PLANS.get(k.plan, {}).get("price_usd", 0) for k in subscribers)
+        by_plan: Dict[str, int] = {}
+        for k in subscribers:
+            by_plan[k.plan] = by_plan.get(k.plan, 0) + 1
+
+        with cls._connect() as conn:
+            topup_revenue = conn.execute(
+                """SELECT COALESCE(SUM(delta), 0) AS credits
+                   FROM credit_ledger WHERE bucket = 'topup'"""
+            ).fetchone()["credits"]
+            spent_30d = conn.execute(
+                """SELECT COALESCE(-SUM(delta), 0) AS credits
+                   FROM credit_ledger
+                   WHERE bucket = 'charge' AND at >= ?""",
+                ((datetime.now() - timedelta(days=30)).isoformat(),),
+            ).fetchone()["credits"]
+
+        return {
+            "customers": len(keys),
+            "active_customers": len(active),
+            "subscribers": len(subscribers),
+            "past_due": len([
+                k for k in active
+                if k.subscription_status == SubscriptionStatus.PAST_DUE
+            ]),
+            "mrr_usd": mrr,
+            "arr_usd": mrr * 12,
+            "subscribers_by_plan": by_plan,
+            # A liability: paid for, not yet delivered.
+            "credits_outstanding": sum(k.credits_remaining for k in active),
+            "credits_delivered": sum(k.credits_used for k in keys),
+            "credits_spent_30d": spent_30d,
+            "topup_credits_sold": topup_revenue,
+        }
+
+    @classmethod
+    def recent_activity(cls, limit: int = 50) -> List[Dict[str, Any]]:
+        """The latest credit movements across every customer."""
+        with cls._connect() as conn:
+            rows = conn.execute(
+                """SELECT l.public_id, l.delta, l.bucket, l.reason,
+                          l.balance_after, l.at, k.label
+                   FROM credit_ledger l
+                   LEFT JOIN access_keys k ON k.public_id = l.public_id
+                   ORDER BY l.id DESC LIMIT ?""",
+                (limit,),
             ).fetchall()
         return [dict(r) for r in rows]
 

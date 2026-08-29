@@ -180,6 +180,9 @@ def test_every_state_changing_endpoint_is_gated_or_explicitly_free(app):
         if rule.rule in FREE_BY_DESIGN:
             continue
         view = app.view_functions[rule.endpoint]
+        # Admin routes are gated by the operator token, not the paywall.
+        if getattr(view, "__spidernet_admin__", False):
+            continue
         if not hasattr(view, "__spidernet_cost__"):
             ungated.append(f"{sorted(methods)} {rule.rule}")
 
@@ -322,3 +325,17 @@ def test_a_successful_request_is_charged(app, client, billing, customer):
 
     assert r.status_code == 200
     assert billing.get(pid).credits_remaining == before - PRICES["crowd_ask"]
+
+
+def test_every_admin_route_is_behind_the_operator_token(app):
+    """
+    A new admin endpoint added without @require_admin would expose every
+    customer. Fail loudly rather than wait to find out.
+    """
+    unguarded = [
+        rule.rule for rule in app.url_map.iter_rules()
+        if rule.rule.startswith("/api/admin")
+        and not getattr(app.view_functions[rule.endpoint],
+                        "__spidernet_admin__", False)
+    ]
+    assert not unguarded, f"admin routes with no operator gate: {unguarded}"
