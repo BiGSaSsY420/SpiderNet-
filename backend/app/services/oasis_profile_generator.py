@@ -20,10 +20,11 @@ from zep_cloud.client import Zep
 
 from ..config import Config
 from ..utils.logger import get_logger
+from ..utils.prompt_lang import localize
 from ..utils.json_repair import repair_json
 from .zep_entity_reader import EntityNode, ZepEntityReader
 
-logger = get_logger('mirofish.oasis_profile')
+logger = get_logger('spidernet.oasis_profile')
 
 
 @dataclass
@@ -642,7 +643,7 @@ class OasisProfileGenerator:
     
     def _get_system_prompt(self, is_individual: bool) -> str:
         """获取系统提示词"""
-        base_prompt = "你是社交媒体用户画像生成专家。生成详细、真实的人设用于舆论模拟,最大程度还原已有现实情况。必须返回有效的JSON格式，所有字符串值不能包含未转义的换行符。使用中文。"
+        base_prompt = localize("你是社交媒体用户画像生成专家。生成详细、真实的人设用于舆论模拟,最大程度还原已有现实情况。必须返回有效的JSON格式，所有字符串值不能包含未转义的换行符。Write every human-readable field in {output_language}.")
         return base_prompt
     
     def _build_individual_persona_prompt(
@@ -658,6 +659,7 @@ class OasisProfileGenerator:
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
         context_str = context[:3000] if context else "无额外上下文"
         
+        output_language = Config.OUTPUT_LANGUAGE
         return f"""为实体生成详细的社交媒体用户人设,最大程度还原已有现实情况。
 
 实体名称: {entity_name}
@@ -682,14 +684,14 @@ class OasisProfileGenerator:
 3. age: 年龄数字（必须是整数）
 4. gender: 性别，必须是英文: "male" 或 "female"
 5. mbti: MBTI类型（如INTJ、ENFP等）
-6. country: 国家（使用中文，如"中国"）
+6. country: the country, written in {output_language}
 7. profession: 职业
 8. interested_topics: 感兴趣话题数组
 
 重要:
 - 所有字段值必须是字符串或数字，不要使用换行符
 - persona必须是一段连贯的文字描述
-- 使用中文（除了gender字段必须用英文male/female）
+- Write all human-readable fields in {output_language} (gender must stay male/female in English)
 - 内容要与实体信息保持一致
 - age必须是有效的整数，gender必须是"male"或"female"
 """
@@ -707,6 +709,7 @@ class OasisProfileGenerator:
         attrs_str = json.dumps(entity_attributes, ensure_ascii=False) if entity_attributes else "无"
         context_str = context[:3000] if context else "无额外上下文"
         
+        output_language = Config.OUTPUT_LANGUAGE
         return f"""为机构/群体实体生成详细的社交媒体账号设定,最大程度还原已有现实情况。
 
 实体名称: {entity_name}
@@ -731,14 +734,14 @@ class OasisProfileGenerator:
 3. age: 固定填30（机构账号的虚拟年龄）
 4. gender: 固定填"other"（机构账号使用other表示非个人）
 5. mbti: MBTI类型，用于描述账号风格，如ISTJ代表严谨保守
-6. country: 国家（使用中文，如"中国"）
+6. country: the country, written in {output_language}
 7. profession: 机构职能描述
 8. interested_topics: 关注领域数组
 
 重要:
 - 所有字段值必须是字符串或数字，不允许null值
 - persona必须是一段连贯的文字描述，不要使用换行符
-- 使用中文（除了gender字段必须用英文"other"）
+- Write all human-readable fields in {output_language} (gender must stay "other" in English)
 - age必须是整数30，gender必须是字符串"other"
 - 机构账号发言要符合其身份定位"""
     

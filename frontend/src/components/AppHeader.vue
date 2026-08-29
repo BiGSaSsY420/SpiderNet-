@@ -1,10 +1,11 @@
 <template>
   <header class="topbar">
     <div class="topbar__left">
-      <button class="brand" @click="router.push('/')">MiroFish</button>
+      <button class="brand" @click="router.push('/')">SpiderNet</button>
 
-      <!-- 五个阶段是真实的执行顺序，直接展示整条进度而不是 "Step 4/5" -->
-      <ol class="steps" :aria-label="`当前阶段：${STEP_NAMES[currentStep - 1]}`">
+      <!-- The five stages are a real sequence, so show the whole path
+           rather than "Step 4 of 5" -->
+      <ol class="steps" :aria-label="`Current stage: ${STEP_NAMES[currentStep - 1]}`">
         <li
           v-for="(name, i) in STEP_NAMES"
           :key="name"
@@ -22,7 +23,7 @@
     </div>
 
     <div class="topbar__right">
-      <div v-if="showViewSwitcher" class="segmented" role="group" aria-label="视图模式">
+      <div v-if="showViewSwitcher" class="segmented" role="group" aria-label="View mode">
         <button
           v-for="mode in VIEW_MODES"
           :key="mode.value"
@@ -50,18 +51,25 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
-const STEP_NAMES = ['图谱构建', '环境搭建', '开始模拟', '报告生成', '深度互动']
+// Plain words, not jargon. "Building the map" beats "GraphRAG construction".
+const STEP_NAMES = [
+  'Reading',
+  'Building',
+  'Running',
+  'Writing up',
+  'Questions'
+]
 
 const VIEW_MODES = [
-  { value: 'graph', label: '图谱' },
-  { value: 'split', label: '双栏' },
-  { value: 'workbench', label: '工作台' }
+  { value: 'graph', label: 'Map' },
+  { value: 'split', label: 'Both' },
+  { value: 'workbench', label: 'Work' }
 ]
 
 defineProps({
-  /** 当前阶段，1–5 */
+  /** Current stage, 1-5 */
   currentStep: { type: Number, required: true },
-  /** 视图模式，配合 v-model 使用 */
+  /** View mode, used with v-model */
   modelValue: { type: String, default: 'split' },
   showViewSwitcher: { type: Boolean, default: true },
   /** '' | 'processing' | 'completed' | 'error' */
@@ -108,7 +116,7 @@ defineEmits(['update:modelValue'])
 }
 .brand:hover { color: var(--mf-accent); }
 
-/* ---- 阶段进度 ---- */
+/* ---- Stage progress ---- */
 
 .steps {
   display: flex;
@@ -155,7 +163,7 @@ defineEmits(['update:modelValue'])
 }
 .steps__item.is-current .steps__dot { opacity: 1; }
 
-/* ---- 视图切换 ---- */
+/* ---- View switcher ---- */
 
 .segmented {
   display: flex;
@@ -188,7 +196,7 @@ defineEmits(['update:modelValue'])
   box-shadow: var(--mf-shadow-xs);
 }
 
-/* ---- 运行状态 ---- */
+/* ---- Run status ---- */
 
 .status {
   display: inline-flex;

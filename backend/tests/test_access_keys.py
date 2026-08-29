@@ -51,18 +51,22 @@ def test_negative_credits_rejected(keystore):
 
 @pytest.mark.parametrize("bad", [
     "", "   ", None, "garbage", "sn_live_short",
-    "sn_live_" + "z" * 72,          # right length, not hex
-    "xx_live_" + "a" * 72,          # wrong prefix
-    "sn_live_" + "a" * 71,          # wrong length
-    "sn-live-" + "a" * 72,          # wrong separator
+    "sn_live_" + "z" * 60,          # right length, not hex
+    "xx_live_" + "a" * 60,          # wrong prefix
+    "sn_live_" + "a" * 59,          # wrong length
+    "sn-live-" + "a" * 60,          # wrong separator
 ])
 def test_malformed_keys_are_rejected(keystore, bad):
     assert keystore.verify(bad) is None
 
 
 def test_unknown_but_wellformed_key_is_rejected(keystore):
+    """Correct shape, no such record - must fail as unknown, not as malformed."""
+    from app.models.access_key import parse_key
+    candidate = "sn_live_" + "a" * 60
+    assert parse_key(candidate) is not None, "test fixture is not actually well-formed"
     keystore.issue("real", credits=10)
-    assert keystore.verify("sn_live_" + "a" * 72) is None
+    assert keystore.verify(candidate) is None
 
 
 def test_right_public_id_wrong_secret_is_rejected(keystore):

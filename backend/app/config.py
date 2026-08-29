@@ -7,7 +7,7 @@ import os
 from dotenv import load_dotenv
 
 # 加载项目根目录的 .env 文件
-# 路径: MiroFish/.env (相对于 backend/app/config.py)
+# 路径: SpiderNet/.env (相对于 backend/app/config.py)
 project_root_env = os.path.join(os.path.dirname(__file__), '../../.env')
 
 if os.path.exists(project_root_env):
@@ -21,7 +21,7 @@ class Config:
     """Flask配置类"""
     
     # Flask配置
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'mirofish-secret-key')
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'spidernet-secret-key')
     DEBUG = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
     
     # JSON配置 - 禁用ASCII转义，让中文直接显示（而不是 \uXXXX 格式）
@@ -58,6 +58,10 @@ class Config:
         'TREND', 'REFRESH', 'DO_NOTHING', 'FOLLOW', 'MUTE'
     ]
     
+    # 生成内容的语言。提示词内部用什么语言书写不影响模型理解，
+    # 但"必须用中文作答"这类指令会决定报告 / 人设 / 帖子的输出语言。
+    OUTPUT_LANGUAGE = os.environ.get('OUTPUT_LANGUAGE', 'English')
+
     # Report Agent配置
     REPORT_AGENT_MAX_TOOL_CALLS = int(os.environ.get('REPORT_AGENT_MAX_TOOL_CALLS', '5'))
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '2'))

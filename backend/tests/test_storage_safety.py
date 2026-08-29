@@ -32,7 +32,7 @@ def test_unsafe_ids_are_rejected(bad):
     "proj_2b7f1a9c4d3e",
     "sim_00112233aabb",
     "report_ffeeddccbbaa",
-    "mirofish_0123456789abcdef",
+    "spidernet_0123456789abcdef",
     "legacy-id-1",
 ])
 def test_real_ids_are_accepted(good):

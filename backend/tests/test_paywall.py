@@ -50,7 +50,7 @@ def test_paid_endpoints_refuse_anonymous_callers(app, client, billing, path):
 
 @pytest.mark.parametrize("path", PAID_POSTS)
 def test_paid_endpoints_refuse_a_bogus_key(app, client, billing, path):
-    r = client.post(path, json={}, headers=auth("sn_live_" + "a" * 72))
+    r = client.post(path, json={}, headers=auth("sn_live_" + "a" * 60))
     assert r.status_code == 401, f"{path} accepted a forged key"
 
 
@@ -69,7 +69,7 @@ def test_error_message_does_not_reveal_whether_a_key_exists(app, client, billing
     """Unknown, malformed and revoked must be indistinguishable."""
     billing.revoke(customer["record"]["public_id"])
     revoked = client.post("/api/report/chat", json={}, headers=auth(customer["key"]))
-    unknown = client.post("/api/report/chat", json={}, headers=auth("sn_live_" + "b" * 72))
+    unknown = client.post("/api/report/chat", json={}, headers=auth("sn_live_" + "b" * 60))
     assert revoked.get_json()["error"] == unknown.get_json()["error"]
 
 

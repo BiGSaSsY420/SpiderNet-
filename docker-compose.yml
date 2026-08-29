@@ -1,9 +1,10 @@
 services:
-  mirofish:
-    image: ghcr.io/666ghj/mirofish:latest
-    # 加速镜像（如拉取缓慢可替换上方地址）
-    # image: ghcr.nju.edu.cn/666ghj/mirofish:latest
-    container_name: mirofish
+  spidernet:
+    # Built and pushed by .github/workflows/docker-image.yml
+    image: ghcr.io/bigsassy420/spidernet:latest
+    # Build locally instead of pulling:
+    # build: .
+    container_name: spidernet
     env_file:
       - .env
     ports:

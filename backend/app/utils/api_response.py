@@ -17,7 +17,7 @@ from flask import current_app, jsonify
 from .logger import get_logger
 from .safe_path import UnsafeIdentifierError
 
-logger = get_logger('mirofish.api')
+logger = get_logger('spidernet.api')
 
 
 def _include_traceback() -> bool:

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { accessKey } from '../store/accessKey'
 
 // 创建axios实例
 const service = axios.create({
@@ -9,9 +10,14 @@ const service = axios.create({
   }
 })
 
-// 请求拦截器
+// Attach the customer's access key to every request. The backend charges
+// credits per operation, so an unauthenticated call is rejected with a 401.
 service.interceptors.request.use(
   config => {
+    if (accessKey.value) {
+      config.headers = config.headers || {}
+      config.headers.Authorization = `Bearer ${accessKey.value}`
+    }
     return config
   },
   error => {
@@ -20,12 +26,12 @@ service.interceptors.request.use(
   }
 )
 
-// 响应拦截器
+// Response interceptor
 service.interceptors.response.use(
   response => {
     const res = response.data
 
-    // 后端统一信封：{ success, data } / { success, error }
+    // The backend uses one envelope: { success, data } / { success, error }
     if (!res.success && res.success !== undefined) {
       const message = res.error || res.message || '请求失败'
       console.error('API Error:', message)
@@ -35,6 +41,20 @@ service.interceptors.response.use(
     return res
   },
   error => {
+    const status = error?.response?.status
+
+    // Turn the two billing failures into messages a person can act on,
+    // rather than a bare status code.
+    if (status === 401) {
+      error.spidernetReason = 'key'
+      error.message = 'That access key was not accepted. Check it and try again.'
+    } else if (status === 402) {
+      error.spidernetReason = 'credits'
+      error.message =
+        error.response?.data?.error ||
+        'You are out of credits. Add more to keep going.'
+    }
+
     console.error('Response error:', error)
     return Promise.reject(error)
   }
