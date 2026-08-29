@@ -13,6 +13,13 @@
           >
             {{ credits.toLocaleString() }} credits
           </span>
+          <button
+            v-if="hasKey"
+            class="mf-btn mf-btn--ghost mf-btn--sm"
+            @click="$router.push('/crowds')"
+          >
+            Ask a crowd
+          </button>
           <button v-if="hasKey" class="mf-btn mf-btn--ghost mf-btn--sm" @click="signOut">
             Sign out
           </button>
