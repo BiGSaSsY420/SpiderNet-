@@ -1,3 +1,5 @@
+**Run it in one command:** `python backend/scripts/demo.py` — no API keys needed. See [QUICKSTART.md](./QUICKSTART.md).
+
 > **SpiderNet is a modified version of [MiroFish](https://github.com/666ghj/MiroFish)**,
 > distributed under the same AGPL-3.0 licence. See [NOTICE](./NOTICE) for what
 > was changed. If you run this over a network you must offer your users its
