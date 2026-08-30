@@ -149,10 +149,13 @@
         </div>
       </section>
     </main>
+
+    <LicenceFooter />
   </div>
 </template>
 
 <script setup>
+import LicenceFooter from '../components/LicenceFooter.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { account, credits, hasKey } from '../store/accessKey'

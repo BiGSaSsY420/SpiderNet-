@@ -1,0 +1,70 @@
+SpiderNet
+=========
+
+SpiderNet is a modified version of MiroFish.
+
+    Upstream:  https://github.com/666ghj/MiroFish
+    Licence:   GNU Affero General Public License v3.0 (see LICENSE)
+
+This is a derivative work. It is distributed under the same licence as the
+original, and the original copyright notices are retained. Nothing here
+supersedes LICENSE; where this file and LICENSE disagree, LICENSE governs.
+
+
+Modifications
+-------------
+
+Changes made in this fork, relative to upstream (AGPL-3.0 section 5a requires
+that modifications be marked):
+
+  2026-08  Added a test suite and fixed the defects it found, including an
+           unbounded loop reachable from the graph-build endpoint and a JSON
+           repair routine that corrupted valid input.
+  2026-08  Added an access-key layer with credit metering, subscriptions and
+           one-off top-ups, plus Stripe checkout and webhook fulfilment.
+  2026-08  Added multi-tenant isolation: projects, simulations, reports,
+           crowds, predictions and build tasks are scoped to the key that
+           created them.
+  2026-08  Added reusable crowds, a calibration record, and an operator
+           console.
+  2026-08  Rebranded the user-facing product from MiroFish to SpiderNet, and
+           translated the interface and generated output to English.
+
+Renaming the product does not change its licence or its origin.
+
+
+If you run this over a network
+------------------------------
+
+AGPL-3.0 section 13 requires that anyone interacting with this software
+remotely be offered its Corresponding Source, at no charge.
+
+Deployments must therefore publish the source of the exact version they run,
+including any local modifications, and link to it from the running
+application. SpiderNet does this through GET /api/legal/source and a link in
+the interface; set SOURCE_URL to point at your own repository before
+deploying, or that offer points somewhere that does not match what you are
+running.
+
+
+Third-party components
+----------------------
+
+SpiderNet depends on, but does not include, the following. Each is used under
+its own licence; consult each project for the authoritative terms.
+
+  OASIS (camel-oasis)     https://github.com/camel-ai/oasis
+  CAMEL (camel-ai)        https://github.com/camel-ai/camel
+  Zep Cloud SDK           https://github.com/getzep/zep-python
+  Flask, Werkzeug         https://palletsprojects.com/
+  OpenAI Python SDK       https://github.com/openai/openai-python
+  Stripe Python SDK       https://github.com/stripe/stripe-python
+  PyMuPDF                 https://github.com/pymupdf/PyMuPDF
+  Vue, Vue Router         https://vuejs.org/
+  D3                      https://d3js.org/
+  Axios                   https://axios-http.com/
+
+The simulation engine itself is OASIS. If you intend to build a product on
+this capability without the obligations above, build on OASIS directly rather
+than on this codebase — deriving from this repository carries its licence with
+it, whatever the product is called.

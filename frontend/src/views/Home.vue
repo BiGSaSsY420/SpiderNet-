@@ -213,10 +213,13 @@
 
       <HistoryDatabase v-if="hasKey" />
     </main>
+
+    <LicenceFooter />
   </div>
 </template>
 
 <script setup>
+import LicenceFooter from '../components/LicenceFooter.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import HistoryDatabase from '../components/HistoryDatabase.vue'

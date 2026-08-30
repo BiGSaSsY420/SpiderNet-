@@ -144,10 +144,13 @@
         </ul>
       </section>
     </main>
+
+    <LicenceFooter />
   </div>
 </template>
 
 <script setup>
+import LicenceFooter from '../components/LicenceFooter.vue'
 import { ref, computed, onMounted } from 'vue'
 import { credits, hasKey } from '../store/accessKey'
 import { refreshAccount } from '../api/account'
