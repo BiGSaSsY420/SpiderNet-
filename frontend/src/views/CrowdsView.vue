@@ -28,20 +28,73 @@
 
       <div v-if="loading" class="notice">Loading your crowds…</div>
 
-      <div v-else-if="crowds.length === 0" class="mf-card empty">
+      <div v-else-if="crowds.length === 0 && !showCapture" class="mf-card empty">
         <h2 class="empty__title">No crowds yet</h2>
         <p class="empty__body">
-          Once a run finishes, save its people as a crowd and you can keep asking
-          them things without building anything again.
+          Save the people from a finished run, and you can keep asking them things
+          without building anything again.
         </p>
-        <button class="mf-btn mf-btn--primary" @click="$router.push('/')">
-          Start a run
-        </button>
+        <div class="empty__actions">
+          <button
+            v-if="runs.length"
+            class="mf-btn mf-btn--primary"
+            @click="showCapture = true"
+          >
+            Save people from a run
+          </button>
+          <button class="mf-btn mf-btn--secondary" @click="$router.push('/')">
+            Start a run
+          </button>
+        </div>
       </div>
 
-      <template v-else>
+      <!-- Save people from a finished run -->
+      <section v-if="showCapture" class="mf-card capture">
+        <h2 class="capture__title">Save people from a run</h2>
+        <p class="capture__body">
+          Give them a name you'll recognise later, like "Ohio parents" or
+          "Our customers, Q3".
+        </p>
+
+        <div class="capture__row">
+          <select v-model="captureRunId" class="capture__select" aria-label="Which run">
+            <option value="" disabled>Choose a run…</option>
+            <option v-for="run in runs" :key="run.simulation_id" :value="run.simulation_id">
+              {{ runLabel(run) }}
+            </option>
+          </select>
+          <input
+            v-model="captureName"
+            class="mf-input"
+            placeholder="Name this crowd"
+            aria-label="Name this crowd"
+          />
+          <button
+            class="mf-btn mf-btn--primary"
+            :disabled="!captureRunId || !captureName.trim() || capturing"
+            @click="capture"
+          >
+            {{ capturing ? 'Saving…' : 'Save' }}
+          </button>
+          <button class="mf-btn mf-btn--ghost" @click="showCapture = false">Cancel</button>
+        </div>
+
+        <p v-if="captureError" class="capture__error" role="alert">{{ captureError }}</p>
+        <p class="capture__note">Free — you already paid to create these people.</p>
+      </section>
+
+      <template v-if="crowds.length">
         <!-- 1. Who -->
         <section class="step">
+          <div class="step__toolbar">
+            <button
+              v-if="runs.length && !showCapture"
+              class="mf-btn mf-btn--secondary mf-btn--sm"
+              @click="showCapture = true"
+            >
+              Save people from another run
+            </button>
+          </div>
           <div class="step__head">
             <span class="step__n" aria-hidden="true">1</span>
             <h2 class="step__title">Who do you want to ask?</h2>
@@ -151,7 +204,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { credits, hasKey } from '../store/accessKey'
 import { refreshAccount } from '../api/account'
-import { listCrowds, askCrowd } from '../api/crowd'
+import { listCrowds, askCrowd, captureCrowd, listSimulations } from '../api/crowd'
 
 const crowds = ref([])
 const loading = ref(true)
@@ -161,24 +214,75 @@ const selectedId = ref(null)
 const question = ref('')
 const sampleSize = ref(25)
 
+const runs = ref([])
+const showCapture = ref(false)
+const captureRunId = ref('')
+const captureName = ref('')
+const capturing = ref(false)
+const captureError = ref('')
+
 const asking = ref(false)
 const askError = ref('')
 const result = ref(null)
 
 const canAsk = computed(() => Boolean(selectedId.value) && question.value.trim() !== '')
 
+function runLabel (run) {
+  const when = new Date(run.created_at)
+  const date = Number.isNaN(when.getTime())
+    ? ''
+    : when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  const people = run.profiles_count
+    ? `${run.profiles_count.toLocaleString()} people`
+    : 'no people yet'
+  return `${date} — ${people}`
+}
+
+async function loadCrowds () {
+  const res = await listCrowds()
+  crowds.value = res.data || []
+  if (!selectedId.value && crowds.value.length === 1) {
+    selectedId.value = crowds.value[0].crowd_id
+  }
+}
+
 onMounted(async () => {
   if (hasKey.value) refreshAccount()
   try {
-    const res = await listCrowds()
-    crowds.value = res.data || []
-    if (crowds.value.length === 1) selectedId.value = crowds.value[0].crowd_id
+    await loadCrowds()
   } catch (e) {
     loadError.value = e.message || 'Could not load your crowds.'
-  } finally {
-    loading.value = false
   }
+  try {
+    // Only runs that actually produced people can become a crowd.
+    const res = await listSimulations()
+    runs.value = (res.data || []).filter(r => (r.profiles_count || 0) > 0)
+  } catch {
+    runs.value = []
+  }
+  loading.value = false
 })
+
+async function capture () {
+  if (capturing.value) return
+  capturing.value = true
+  captureError.value = ''
+  try {
+    const res = await captureCrowd({
+      simulation_id: captureRunId.value,
+      name: captureName.value.trim(),
+    })
+    await loadCrowds()
+    selectedId.value = res.data.crowd_id
+    showCapture.value = false
+    captureName.value = ''
+    captureRunId.value = ''
+  } catch (e) {
+    captureError.value = e.message || 'Could not save those people.'
+  } finally {
+    capturing.value = false
+  }
+}
 
 async function ask () {
   if (!canAsk.value || asking.value) return
@@ -329,6 +433,65 @@ async function ask () {
   font-size: var(--mf-text-lg);
   font-weight: var(--mf-weight-semibold);
   letter-spacing: var(--mf-tracking-tight);
+}
+
+/* ---- Capture ---- */
+
+.capture { padding: var(--mf-space-5); }
+
+.capture__title {
+  font-size: var(--mf-text-lg);
+  font-weight: var(--mf-weight-semibold);
+}
+
+.capture__body {
+  margin-top: var(--mf-space-2);
+  color: var(--mf-ink-secondary);
+}
+
+.capture__row {
+  margin-top: var(--mf-space-4);
+  display: flex;
+  gap: var(--mf-space-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.capture__row .mf-input { flex: 1 1 200px; width: auto; }
+
+.capture__select {
+  height: 40px;
+  padding: 0 var(--mf-space-3);
+  background: var(--mf-surface);
+  border: 1px solid var(--mf-separator-strong);
+  border-radius: var(--mf-radius-md);
+  color: var(--mf-ink);
+  cursor: pointer;
+}
+
+.capture__error {
+  margin-top: var(--mf-space-3);
+  color: var(--mf-danger);
+  font-size: var(--mf-text-sm);
+}
+
+.capture__note {
+  margin-top: var(--mf-space-3);
+  font-size: var(--mf-text-sm);
+  color: var(--mf-ink-muted);
+}
+
+.empty__actions {
+  display: flex;
+  gap: var(--mf-space-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.step__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: calc(var(--mf-space-2) * -1);
 }
 
 /* ---- Crowd picker ---- */

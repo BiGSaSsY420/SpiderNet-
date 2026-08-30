@@ -10,7 +10,9 @@ from flask import request, jsonify, send_file
 from . import simulation_bp
 from ..config import Config
 from ..utils.api_response import error_response
-from ..utils.billing import require_access_key, PRICES
+from ..utils.billing import (
+    require_access_key, PRICES, assert_owner, current_key_id,
+)
 from ..services.zep_entity_reader import ZepEntityReader
 from ..services.oasis_profile_generator import OasisProfileGenerator
 from ..services.simulation_manager import SimulationManager, SimulationStatus
@@ -211,6 +213,7 @@ def create_simulation():
             graph_id=graph_id,
             enable_twitter=data.get('enable_twitter', True),
             enable_reddit=data.get('enable_reddit', True),
+            owner_key_id=current_key_id(),
         )
         
         return jsonify({
@@ -761,6 +764,7 @@ def get_simulation(simulation_id: str):
 
 
 @simulation_bp.route('/list', methods=['GET'])
+@require_access_key(cost=0)
 def list_simulations():
     """
     列出所有模拟
@@ -772,7 +776,9 @@ def list_simulations():
         project_id = request.args.get('project_id')
         
         manager = SimulationManager()
-        simulations = manager.list_simulations(project_id=project_id)
+        simulations = manager.list_simulations(
+            project_id=project_id, owner_key_id=current_key_id()
+        )
         
         return jsonify({
             "success": True,

@@ -274,3 +274,24 @@ def test_capture_requires_a_name(app, client, crowds, customer):
                     json={"simulation_id": "sim_whatever01"},
                     headers=auth(customer["key"]))
     assert r.status_code == 400
+
+
+def test_you_cannot_capture_a_crowd_from_another_customers_run(app, client, crowds,
+                                                               isolated_billing,
+                                                               isolated_storage):
+    """The people in a run are the customer's data, not a shared resource."""
+    from app.services.simulation_manager import SimulationManager
+
+    alice = isolated_billing.issue("Alice", credits=1000)
+    bob = isolated_billing.issue("Bob", credits=1000)
+
+    manager = SimulationManager()
+    state = manager.create_simulation(
+        project_id="proj_alice0001", graph_id="g_1",
+        owner_key_id=alice["record"]["public_id"],
+    )
+
+    r = client.post("/api/crowds/from-simulation",
+                    json={"simulation_id": state.simulation_id, "name": "Stolen"},
+                    headers=auth(bob["key"]))
+    assert r.status_code == 404, "Bob captured Alice's people"

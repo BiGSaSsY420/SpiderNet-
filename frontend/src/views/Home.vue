@@ -21,6 +21,13 @@
           >
             Ask a crowd
           </button>
+          <button
+            v-if="hasKey"
+            class="mf-btn mf-btn--ghost mf-btn--sm"
+            @click="$router.push('/track-record')"
+          >
+            Track record
+          </button>
           <button v-if="hasKey" class="mf-btn mf-btn--ghost mf-btn--sm" @click="signOut">
             Sign out
           </button>

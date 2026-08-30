@@ -75,6 +75,9 @@ class SimulationState:
     # 错误信息
     error: Optional[str] = None
     
+    # 所属访问密钥（多租户隔离）；历史数据为 None
+    owner_key_id: Optional[str] = None
+    
     def to_dict(self) -> Dict[str, Any]:
         """完整状态字典（内部使用）"""
         return {
@@ -95,6 +98,7 @@ class SimulationState:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "error": self.error,
+            "owner_key_id": self.owner_key_id,
         }
     
     def to_simple_dict(self) -> Dict[str, Any]:
@@ -195,6 +199,7 @@ class SimulationManager:
             created_at=data.get("created_at", datetime.now().isoformat()),
             updated_at=data.get("updated_at", datetime.now().isoformat()),
             error=data.get("error"),
+            owner_key_id=data.get("owner_key_id"),
         )
         
         self._simulations[simulation_id] = state
@@ -206,6 +211,7 @@ class SimulationManager:
         graph_id: str,
         enable_twitter: bool = True,
         enable_reddit: bool = True,
+        owner_key_id: Optional[str] = None,
     ) -> SimulationState:
         """
         创建新的模拟
@@ -229,6 +235,7 @@ class SimulationManager:
             enable_twitter=enable_twitter,
             enable_reddit=enable_reddit,
             status=SimulationStatus.CREATED,
+            owner_key_id=owner_key_id,
         )
         
         self._save_simulation_state(state)
@@ -469,8 +476,17 @@ class SimulationManager:
         """获取模拟状态"""
         return self._load_simulation_state(simulation_id)
     
-    def list_simulations(self, project_id: Optional[str] = None) -> List[SimulationState]:
-        """列出所有模拟"""
+    def list_simulations(
+        self,
+        project_id: Optional[str] = None,
+        owner_key_id: Optional[str] = None,
+    ) -> List[SimulationState]:
+        """
+        列出模拟。
+
+        owner_key_id 非 None 时按拥有者过滤 —— 之前会把所有租户的模拟
+        返回给任何调用方。历史数据没有拥有者，仍然可见。
+        """
         simulations = []
         
         if os.path.exists(self.SIMULATION_DATA_DIR):
@@ -481,9 +497,15 @@ class SimulationManager:
                     continue
                 
                 state = self._load_simulation_state(sim_id)
-                if state:
-                    if project_id is None or state.project_id == project_id:
-                        simulations.append(state)
+                if not state:
+                    continue
+                if project_id is not None and state.project_id != project_id:
+                    continue
+                if (owner_key_id is not None
+                        and state.owner_key_id is not None
+                        and state.owner_key_id != owner_key_id):
+                    continue
+                simulations.append(state)
         
         return simulations
     

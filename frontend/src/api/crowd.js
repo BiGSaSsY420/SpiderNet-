@@ -18,3 +18,6 @@ export const askCrowd = (crowdId, data) =>
   service.post(`/api/crowds/${crowdId}/ask`, data)
 
 export const deleteCrowd = (crowdId) => service.delete(`/api/crowds/${crowdId}`)
+
+/** Finished runs, for choosing which people to save as a crowd. */
+export const listSimulations = () => service.get('/api/simulation/list')

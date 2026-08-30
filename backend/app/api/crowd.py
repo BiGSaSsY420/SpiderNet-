@@ -65,6 +65,9 @@ def capture_crowd():
     if state is None:
         return error_response("No such run.", 404)
 
+    # You may only capture people from a run you own.
+    assert_owner(getattr(state, 'owner_key_id', None))
+
     platform = data.get('platform', 'reddit')
     people = manager.get_profiles(simulation_id, platform=platform)
     if not people:

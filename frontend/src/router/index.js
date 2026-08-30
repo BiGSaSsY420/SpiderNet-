@@ -8,12 +8,18 @@ import InteractionView from '../views/InteractionView.vue'
 import CrowdsView from '../views/CrowdsView.vue'
 import BillingView from '../views/BillingView.vue'
 import AdminView from '../views/AdminView.vue'
+import CalibrationView from '../views/CalibrationView.vue'
 
 const routes = [
   {
     path: '/',
     name: 'Home',
     component: Home
+  },
+  {
+    path: '/track-record',
+    name: 'Calibration',
+    component: CalibrationView
   },
   {
     path: '/admin',

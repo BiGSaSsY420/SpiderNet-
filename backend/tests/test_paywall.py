@@ -339,3 +339,20 @@ def test_every_admin_route_is_behind_the_operator_token(app):
                         "__spidernet_admin__", False)
     ]
     assert not unguarded, f"admin routes with no operator gate: {unguarded}"
+
+
+def test_simulation_listing_only_shows_your_own(app, client, billing, isolated_storage):
+    """Same leak as the project listing: every tenant's runs to whoever asked."""
+    from app.services.simulation_manager import SimulationManager
+
+    alice = billing.issue("Alice", credits=1000)
+    bob = billing.issue("Bob", credits=1000)
+    manager = SimulationManager()
+    manager.create_simulation(project_id="p_a", graph_id="g",
+                              owner_key_id=alice["record"]["public_id"])
+    manager.create_simulation(project_id="p_b", graph_id="g",
+                              owner_key_id=bob["record"]["public_id"])
+
+    listed = client.get("/api/simulation/list", headers=auth(bob["key"])).get_json()
+    projects = {s["project_id"] for s in listed["data"]}
+    assert projects == {"p_b"}, f"Bob saw {projects}"
