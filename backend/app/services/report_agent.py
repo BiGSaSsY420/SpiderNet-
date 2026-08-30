@@ -452,6 +452,9 @@ class Report:
     completed_at: str = ""
     error: Optional[str] = None
     
+    # 所属访问密钥（多租户隔离）；历史数据为 None
+    owner_key_id: Optional[str] = None
+    
     def to_dict(self) -> Dict[str, Any]:
         return {
             "report_id": self.report_id,
@@ -463,7 +466,8 @@ class Report:
             "markdown_content": self.markdown_content,
             "created_at": self.created_at,
             "completed_at": self.completed_at,
-            "error": self.error
+            "error": self.error,
+            "owner_key_id": self.owner_key_id
         }
 
 
@@ -891,7 +895,8 @@ class ReportAgent:
         simulation_id: str,
         simulation_requirement: str,
         llm_client: Optional[LLMClient] = None,
-        zep_tools: Optional[ZepToolsService] = None
+        zep_tools: Optional[ZepToolsService] = None,
+        owner_key_id: Optional[str] = None
     ):
         """
         初始化Report Agent
@@ -906,6 +911,8 @@ class ReportAgent:
         self.graph_id = graph_id
         self.simulation_id = simulation_id
         self.simulation_requirement = simulation_requirement
+        # 报告归属，用于多租户隔离
+        self.owner_key_id = owner_key_id
         
         self.llm = llm_client or LLMClient()
         self.zep_tools = zep_tools or ZepToolsService()
@@ -1573,7 +1580,8 @@ class ReportAgent:
             graph_id=self.graph_id,
             simulation_requirement=self.simulation_requirement,
             status=ReportStatus.PENDING,
-            created_at=datetime.now().isoformat()
+            created_at=datetime.now().isoformat(),
+            owner_key_id=self.owner_key_id
         )
         
         # 已完成的章节标题列表（用于进度追踪）
@@ -2497,7 +2505,8 @@ class ReportManager:
             markdown_content=markdown_content,
             created_at=data.get('created_at', ''),
             completed_at=data.get('completed_at', ''),
-            error=data.get('error')
+            error=data.get('error'),
+            owner_key_id=data.get('owner_key_id')
         )
     
     @classmethod
@@ -2522,26 +2531,39 @@ class ReportManager:
         return None
     
     @classmethod
-    def list_reports(cls, simulation_id: Optional[str] = None, limit: int = 50) -> List[Report]:
-        """列出报告"""
+    def list_reports(
+        cls,
+        simulation_id: Optional[str] = None,
+        limit: int = 50,
+        owner_key_id: Optional[str] = None,
+    ) -> List[Report]:
+        """
+        列出报告。
+
+        owner_key_id 非 None 时按拥有者过滤 —— 之前会把所有租户的报告
+        返回给任何调用方。历史数据没有拥有者，仍然可见。
+        """
         cls._ensure_reports_dir()
         
         reports = []
         for item in os.listdir(cls.REPORTS_DIR):
             item_path = os.path.join(cls.REPORTS_DIR, item)
             # 新格式：文件夹
+            report = None
             if os.path.isdir(item_path):
                 report = cls.get_report(item)
-                if report:
-                    if simulation_id is None or report.simulation_id == simulation_id:
-                        reports.append(report)
-            # 兼容旧格式：JSON文件
-            elif item.endswith('.json'):
-                report_id = item[:-5]
-                report = cls.get_report(report_id)
-                if report:
-                    if simulation_id is None or report.simulation_id == simulation_id:
-                        reports.append(report)
+            elif item.endswith('.json'):        # 兼容旧格式
+                report = cls.get_report(item[:-5])
+
+            if not report:
+                continue
+            if simulation_id is not None and report.simulation_id != simulation_id:
+                continue
+            if (owner_key_id is not None
+                    and report.owner_key_id is not None
+                    and report.owner_key_id != owner_key_id):
+                continue
+            reports.append(report)
         
         # 按创建时间倒序
         reports.sort(key=lambda r: r.created_at, reverse=True)

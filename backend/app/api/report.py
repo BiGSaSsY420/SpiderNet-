@@ -11,7 +11,9 @@ from flask import request, jsonify, send_file
 from . import report_bp
 from ..config import Config
 from ..utils.api_response import error_response
-from ..utils.billing import require_access_key, PRICES
+from ..utils.billing import (
+    require_access_key, PRICES, assert_owner, current_key_id,
+)
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
@@ -124,6 +126,10 @@ def generate_report():
         )
         
         # 定义后台任务
+        # The agent runs in a background thread, where there is no request
+        # context, so the owner has to be captured before the thread starts.
+        owner_key_id = current_key_id()
+
         def run_generate():
             try:
                 task_manager.update_task(
@@ -137,7 +143,8 @@ def generate_report():
                 agent = ReportAgent(
                     graph_id=graph_id,
                     simulation_id=simulation_id,
-                    simulation_requirement=simulation_requirement
+                    simulation_requirement=simulation_requirement,
+                    owner_key_id=owner_key_id
                 )
                 
                 # 进度回调
@@ -296,6 +303,8 @@ def get_report(report_id: str):
                 "error": f"报告不存在: {report_id}"
             }), 404
         
+        assert_owner(report.owner_key_id)
+        
         return jsonify({
             "success": True,
             "data": report.to_dict()
@@ -342,6 +351,7 @@ def get_report_by_simulation(simulation_id: str):
 
 
 @report_bp.route('/list', methods=['GET'])
+@require_access_key(cost=0)
 def list_reports():
     """
     列出所有报告
@@ -363,7 +373,8 @@ def list_reports():
         
         reports = ReportManager.list_reports(
             simulation_id=simulation_id,
-            limit=limit
+            limit=limit,
+            owner_key_id=current_key_id()
         )
         
         return jsonify({
@@ -392,6 +403,8 @@ def download_report(report_id: str):
                 "success": False,
                 "error": f"报告不存在: {report_id}"
             }), 404
+        
+        assert_owner(report.owner_key_id)
         
         md_path = ReportManager._get_report_markdown_path(report_id)
         

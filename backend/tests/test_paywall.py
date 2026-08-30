@@ -356,3 +356,63 @@ def test_simulation_listing_only_shows_your_own(app, client, billing, isolated_s
     listed = client.get("/api/simulation/list", headers=auth(bob["key"])).get_json()
     projects = {s["project_id"] for s in listed["data"]}
     assert projects == {"p_b"}, f"Bob saw {projects}"
+
+
+# --- tenant isolation, structurally -----------------------------------------
+
+# Every endpoint that returns a *collection* of customer-owned things. Six
+# separate leaks came from this one pattern — a listing written before there
+# were tenants — so the list is pinned here rather than rediscovered.
+COLLECTION_ENDPOINTS = [
+    "/api/graph/project/list",
+    "/api/graph/tasks",
+    "/api/simulation/list",
+    "/api/simulation/history",
+    "/api/report/list",
+    "/api/crowds",
+    "/api/calibration/predictions",
+]
+
+
+@pytest.mark.parametrize("path", COLLECTION_ENDPOINTS)
+def test_collection_endpoints_require_a_key(app, client, billing, path):
+    """
+    Without a key there is no caller, so there is no way to filter — which
+    means an unauthenticated listing is necessarily everyone's data.
+    """
+    assert client.get(path).status_code == 401, f"{path} listed data anonymously"
+
+
+@pytest.mark.parametrize("path", COLLECTION_ENDPOINTS)
+def test_collection_endpoints_are_scoped_to_the_caller(app, client, billing, path):
+    """
+    Two customers, one dataset each: neither may see the other's rows. This is
+    deliberately generic so a new listing endpoint added to the list above is
+    covered without writing a bespoke test for it.
+    """
+    from app.models.crowd import CrowdManager
+    from app.models.calibration import CalibrationStore
+    from app.models.project import ProjectManager
+    from app.services.simulation_manager import SimulationManager
+
+    alice = billing.issue("Alice", credits=1000)
+    bob = billing.issue("Bob", credits=1000)
+    a_id = alice["record"]["public_id"]
+
+    # Everything below belongs to Alice.
+    ProjectManager.create_project(name="Alice project", owner_key_id=a_id)
+    SimulationManager().create_simulation(
+        project_id="p_alice", graph_id="g", owner_key_id=a_id)
+    CrowdManager.create(name="Alice crowd", owner_key_id=a_id,
+                        people=[{"name": "P", "persona": "x"}])
+    CalibrationStore.record(question="Q", claim="C", probability=0.5,
+                            owner_key_id=a_id)
+
+    body = client.get(path, headers=auth(bob["key"])).get_json()
+    assert body["success"] is True, f"{path} failed for a valid key"
+
+    rows = body.get("data") or []
+    assert "Alice" not in str(rows), (
+        f"{path} showed Bob something of Alice's:\n{str(rows)[:400]}"
+    )
+    assert a_id not in str(rows), f"{path} leaked Alice's key id to Bob"

@@ -851,6 +851,7 @@ def _get_report_id_for_simulation(simulation_id: str) -> str:
 
 
 @simulation_bp.route('/history', methods=['GET'])
+@require_access_key(cost=0)
 def get_simulation_history():
     """
     获取历史模拟列表（带项目详情）
@@ -889,7 +890,9 @@ def get_simulation_history():
         limit = request.args.get('limit', 20, type=int)
         
         manager = SimulationManager()
-        simulations = manager.list_simulations()[:limit]
+        simulations = manager.list_simulations(
+            owner_key_id=current_key_id()
+        )[:limit]
         
         # 增强模拟数据，只从 Simulation 文件读取
         enriched_simulations = []

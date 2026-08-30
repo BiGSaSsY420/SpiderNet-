@@ -441,7 +441,11 @@ def build_graph():
         
         # 创建异步任务
         task_manager = TaskManager()
-        task_id = task_manager.create_task(f"构建图谱: {graph_name}")
+        task_id = task_manager.create_task(
+            f"构建图谱: {graph_name}",
+            # Lets GET /api/graph/tasks show a customer only their own work.
+            metadata={"owner_key_id": current_key_id(), "project_id": project_id},
+        )
         logger.info(f"创建图谱构建任务: task_id={task_id}, project_id={project_id}")
         
         # 更新项目状态
@@ -621,15 +625,23 @@ def get_task(task_id: str):
 
 
 @graph_bp.route('/tasks', methods=['GET'])
+@require_access_key(cost=0)
 def list_tasks():
     """
-    列出所有任务
+    列出当前密钥的任务。
+
+    任务的 metadata 里带着 project_id 等信息，之前会把所有租户的任务
+    返回给任何调用方。
     """
-    tasks = TaskManager().list_tasks()
+    caller = current_key_id()
+    tasks = [
+        t for t in TaskManager().list_tasks()
+        if (t.get('metadata') or {}).get('owner_key_id') in (None, caller)
+    ]
     
     return jsonify({
         "success": True,
-        "data": [t.to_dict() for t in tasks],
+        "data": tasks,
         "count": len(tasks)
     })
 
