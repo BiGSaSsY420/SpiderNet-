@@ -163,7 +163,13 @@ def verify_event(payload: bytes, signature_header: Optional[str]) -> Dict[str, A
     if not signature_header:
         raise WebhookRejected("Missing Stripe-Signature header.")
 
-    stripe = _client()
+    try:
+        stripe = _client()
+    except (StripeNotConfigured, ImportError) as e:
+        raise WebhookRejected(
+            f"Stripe is unavailable to check signatures: {e}"
+        ) from e
+
     try:
         stripe.Webhook.construct_event(
             payload, signature_header, cfg["webhook_secret"]

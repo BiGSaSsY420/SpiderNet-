@@ -8,6 +8,7 @@ these tests are about the ways it must refuse to do that.
 import hashlib
 import hmac
 import json
+import sys
 import time
 
 import pytest
@@ -90,6 +91,27 @@ def test_without_a_configured_secret_nothing_verifies(keystore, monkeypatch):
     payload = event("checkout.session.completed", {"id": "cs_1"})
     with pytest.raises(stripe_billing.WebhookRejected):
         stripe_billing.verify_event(payload, sign(payload))
+
+
+def test_a_missing_secret_key_is_rejected_not_crashed(keystore, monkeypatch):
+    """A signing secret without an API key is still a refusal, not a 500."""
+    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
+    payload = event("checkout.session.completed", {"id": "cs_1"})
+    with pytest.raises(stripe_billing.WebhookRejected) as rejected:
+        stripe_billing.verify_event(payload, sign(payload))
+    assert not isinstance(rejected.value, stripe_billing.StripeNotConfigured)
+    assert isinstance(
+        rejected.value.__cause__, stripe_billing.StripeNotConfigured
+    )
+
+
+def test_a_missing_stripe_sdk_is_rejected_not_crashed(keystore, monkeypatch):
+    """An uninstalled SDK makes `import stripe` raise; that is still a refusal."""
+    monkeypatch.setitem(sys.modules, "stripe", None)
+    payload = event("checkout.session.completed", {"id": "cs_1"})
+    with pytest.raises(stripe_billing.WebhookRejected) as rejected:
+        stripe_billing.verify_event(payload, sign(payload))
+    assert isinstance(rejected.value.__cause__, ImportError)
 
 
 # --- fulfilment -----------------------------------------------------------
