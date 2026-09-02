@@ -30,6 +30,7 @@ jobs:
           uv pip install \
             flask flask-cors python-dotenv pydantic openai \
             charset-normalizer chardet PyMuPDF "zep-cloud==3.13.0" \
+            "stripe>=15.5.0" \
             pytest pytest-asyncio
 
       - name: Run pytest
