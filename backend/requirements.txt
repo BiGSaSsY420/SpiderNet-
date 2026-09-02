@@ -36,4 +36,4 @@ pydantic>=2.0.0
 
 # ============= 支付 =============
 # Stripe SDK（订阅 / 充值 / Webhook 验签）
-stripe>=15.0.0
+stripe>=15.5.0

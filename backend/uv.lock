@@ -2917,7 +2917,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "stripe", specifier = ">=15.0.0" },
+    { name = "stripe", specifier = ">=15.5.0" },
     { name = "zep-cloud", specifier = "==3.13.0" },
 ]
 provides-extras = ["dev"]

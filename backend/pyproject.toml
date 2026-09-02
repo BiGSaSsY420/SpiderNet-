@@ -34,7 +34,7 @@ dependencies = [
     "pydantic>=2.0.0",
 
     # 支付
-    "stripe>=15.0.0",
+    "stripe>=15.5.0",
 ]
 
 [project.optional-dependencies]
