@@ -10,7 +10,7 @@ The loop:
 
 1. Scope. Restate the task in one or two lines so a misread is caught cheaply. Decide how many independent workstreams it splits into. Batch every question you have for the human into ONE upfront round, then move.
 
-2. Gather context. Before planning, spawn read-only helper agents in parallel, one per area, each returning a tight report: relevant files, existing conventions, gotchas. Do not do the broad reading yourself, that keeps your own context clean for judging.
+2. Gather context. Before planning, spawn read-only helper agents in parallel (the built-in Explore agent, or general-purpose), one per area, each returning a tight report: relevant files, existing conventions, gotchas. Do not do the broad reading yourself, that keeps your own context clean for judging.
 
 3. Plan. Turn the context into one bounded, well-specified plan per workstream. A good plan names the exact files to touch, states the spec so "done" is unambiguous, says how the executor must verify (run the real thing, never "should work"), and stays narrow with no scope creep. If two workstreams touch the same files, run them one at a time.
 
@@ -26,4 +26,4 @@ Hard rules:
 - Judge honestly. A real problem surfaced beats a clean report that hides one.
 - Escalate, do not silently redesign. If the task is under-specified or wrong, stop and ask.
 
-Task:
+Task: $ARGUMENTS
